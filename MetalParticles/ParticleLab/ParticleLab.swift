@@ -1,37 +1,21 @@
-//
-//  ParticleLab.swift
-//  MetalParticles
-//
-
 import Metal
 import MetalKit
 
 final class ParticleLab: MTKView {
     let imageWidth: UInt
     let imageHeight: UInt
-
-    // Буферы для передачи размеров текстуры на GPU (создаются один раз в setUpMetal).
-    // Используем .cpuCacheModeWriteCombined — оптимальный режим для данных,
-    // которые CPU только пишет, а GPU только читает.
+    
     private var imageWidthFloatBuffer: MTLBuffer!
     private var imageHeightFloatBuffer: MTLBuffer!
-
+    
     private var particleRenderTexture: MTLTexture!
-
-    // ── Metal объекты пайплайна ────────────────────────────────────────────────
-    // pipelineState     — MTLComputePipelineState: «выпеченный» пайплайн для GPU,
-    //                     включает шейдер, конфигурацию тредгрупп и т.д.
-    // commandQueue      — MTLCommandQueue: единственная очередь команд (thread-safe,
-    //                     переиспользуется каждый кадр)
+    
     private var pipelineState: MTLComputePipelineState!
     private var commandQueue: MTLCommandQueue!
-
-    // Размеры тредгрупп, вычисляются один раз после создания pipelineState.
-    // threadsPerThreadgroup  — ширина SIMD-волны (обычно 32 или 64)
-    // threadgroupsPerGrid    — сколько тредгрупп нужно чтобы покрыть все частицы
+    
     private var threadsPerThreadgroup: MTLSize!
     private var threadgroupsPerGrid: MTLSize!
-
+    
     private struct FrameResources {
         let particlesBufferNoCopy: MTLBuffer
         let gravityWellBuffer: MTLBuffer
@@ -40,149 +24,126 @@ final class ParticleLab: MTKView {
         let respawnBuffer: MTLBuffer
         let windZonesBuffer: MTLBuffer
     }
-
-    // ── Пайплайн визуализации зон силы ────────────────────────────────────────
-    // Полноэкранный render pass (vertex+fragment) поверх готового кадра.
-    // Fragment-шейдер собирает финальный кадр: blur(particesTexture) + overlay зон силы.
+    
     private var forceAreaRenderPipelineState: MTLRenderPipelineState!
-
-    // Включает/выключает отрисовку визуальных индикаторов зон силы.
+    
     var showForceAreas: Bool = true
-
+    
     let particleCount: Int
-    // posix_memalign требует выравнивания кратного странице (0x4000 = 16 KB).
-    // Это позволяет передать память в makeBuffer(bytesNoCopy:...) без копирования —
-    // GPU читает прямо из этой памяти, экономя пропускную способность шины.
     let alignment: Int = 0x4000
     let particlesMemoryByteSize: Int
-
+    
     private var particlesMemory: UnsafeMutableRawPointer?
     private var particlesParticlePtr: UnsafeMutablePointer<Particle>!
     private var particlesParticleBufferPtr: UnsafeMutableBufferPointer<Particle>!
-
-    // Специальная частица-«контейнер» для хранения параметров 4 гравитационных колодцев.
-    // Поля A/B/C/D соответствуют колодцам 1/2/3/4:
-    //   .x, .y — позиция в пикселях
-    //   .z     — масса (сила притяжения)
-    //   .w     — спин (тангенциальная сила вращения)
- var gravityWellParticle = Particle(
+    
+    var gravityWellParticle = Particle(
         A: Vector4(x: 1, y: 0, z: 0, w: 0),
         B: Vector4(x: 1, y: 0, z: 0, w: 0),
         C: Vector4(x: 1, y: 0, z: 0, w: 0),
         D: Vector4(x: 1, y: 0, z: 0, w: 0)
     )
-
+    
     private var frameStartTime: CFAbsoluteTime!
     private var frameNumber = 0
     let particleSize = MemoryLayout<Particle>.stride
-
+    
     weak var particleLabDelegate: ParticleLabDelegate?
-
+    
     var particleColor = ParticleColor(R: 1, G: 1.0, B: 1.0, A: 1)
     var dragFactor: Float = 0.97
     var respawnOutOfBoundsParticles = false
-
-    // Если true — particlesTexture очищается каждый кадр (резкие частицы без следа).
-    // Если false — сохраняется история, а blur выполняется в финальном fragment-pass.
+    
     var clearOnStep = true
-
+    
     let statusPrefix: String
     var statusPostix: String = ""
-
-    // ── Зоны ветра ─────────────────────────────────────────────────────────────
-    // Массив из 4 круговых зон ветра. Каждая зона задаёт область,
-    // внутри которой частицы получают дополнительное ускорение в заданном направлении.
-    // strength = 0 означает что зона неактивна.
+    
     var windZones: [WindZone] = [
         WindZone(x: 0, y: 0, radius: 1, strength: 0, forceX: 0, forceY: 0, _pad0: 0, _pad1: 0),
         WindZone(x: 0, y: 0, radius: 1, strength: 0, forceX: 0, forceY: 0, _pad0: 0, _pad1: 0),
         WindZone(x: 0, y: 0, radius: 1, strength: 0, forceX: 0, forceY: 0, _pad0: 0, _pad1: 0),
         WindZone(x: 0, y: 0, radius: 1, strength: 0, forceX: 0, forceY: 0, _pad0: 0, _pad1: 0),
     ]
-
+    
     init(width: UInt, height: UInt, numParticles: ParticleCount, hiDPI: Bool) {
         particleCount = numParticles.rawValue
-
+        
         imageWidth = width
         imageHeight = height
-
+        
         particlesMemoryByteSize = particleCount * MemoryLayout<Particle>.stride
-
+        
         let formatter = NumberFormatter()
         formatter.usesGroupingSeparator = true
         formatter.numberStyle = .decimal
-
+        
         statusPrefix = (formatter.string(from: NSNumber(value: numParticles.rawValue * 4)) ?? "0") + " Particles"
-
+        
         let displayScale = max(1, UInt(UIScreen.main.scale.rounded()))
         let frameWidth = hiDPI ? width / displayScale : width
         let frameHeight = hiDPI ? height / displayScale : height
-
+        
         super.init(
             frame: CGRect(x: 0, y: 0, width: Int(frameWidth), height: Int(frameHeight)),
             device: MetalDevice.shared.device
         )
-
+        
         framebufferOnly = false
         drawableSize = CGSize(width: CGFloat(imageWidth), height: CGFloat(imageHeight))
-
+        
         setUpParticles()
         setUpMetal()
-
+        
         isMultipleTouchEnabled = true
     }
-
+    
     required init(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-
+    
     deinit {
         if let particlesMemory {
             free(particlesMemory)
         }
     }
-
-    // Выделяет страничноё-выровненную память для частиц.
-    // posix_memalign гарантирует что адрес кратен alignment (0x4000),
-    // что является обязательным условием для makeBuffer(bytesNoCopy:...).
+    
     private func setUpParticles() {
         let result = posix_memalign(&particlesMemory, alignment, particlesMemoryByteSize)
         guard result == 0, let particlesMemory else {
             fatalError("posix_memalign failed with code \(result)")
         }
-
+        
         particlesParticlePtr = particlesMemory.bindMemory(to: Particle.self, capacity: particleCount)
         particlesParticleBufferPtr = UnsafeMutableBufferPointer(start: particlesParticlePtr, count: particleCount)
-
+        
         resetParticles(true)
     }
-
-
-
+    
     func resetParticles(_ edgesOnly: Bool = false) {
         func rand() -> Float32 {
             Float(drand48() - 0.5) * 0.005
         }
-
+        
         let imageWidthDouble = Double(imageWidth)
         let imageHeightDouble = Double(imageHeight)
-
+        
         for index in particlesParticleBufferPtr.startIndex..<particlesParticleBufferPtr.endIndex {
             var positionAX = Float(drand48() * imageWidthDouble)
             var positionAY = Float(drand48() * imageHeightDouble)
-
+            
             var positionBX = Float(drand48() * imageWidthDouble)
             var positionBY = Float(drand48() * imageHeightDouble)
-
+            
             var positionCX = Float(drand48() * imageWidthDouble)
             var positionCY = Float(drand48() * imageHeightDouble)
-
+            
             var positionDX = Float(drand48() * imageWidthDouble)
             var positionDY = Float(drand48() * imageHeightDouble)
-
+            
             if edgesOnly {
                 let positionRule = Int(arc4random() % 4)
-
+                
                 if positionRule == 0 {
                     positionAX = 0
                     positionBX = 0
@@ -205,82 +166,69 @@ final class ParticleLab: MTKView {
                     positionDY = Float(imageHeight)
                 }
             }
-
+            
             let particle = Particle(
                 A: Vector4(x: positionAX, y: positionAY, z: rand(), w: rand()),
                 B: Vector4(x: positionBX, y: positionBY, z: rand(), w: rand()),
                 C: Vector4(x: positionCX, y: positionCY, z: rand(), w: rand()),
                 D: Vector4(x: positionDX, y: positionDY, z: rand(), w: rand())
             )
-
+            
             particlesParticleBufferPtr[index] = particle
         }
     }
-
-    // ── Инициализация Metal-пайплайна ──────────────────────────────────────────
-    // Этот метод выполняется один раз при старте и подготавливает все GPU-объекты.
+    
     private func setUpMetal() {
         let metalDevice = MetalDevice.shared.device
         let sharedCommandQueue = MetalDevice.shared.commandQueue
         device = metalDevice
-
+        
         guard let device else {
             particleLabDelegate?.particleLabMetalUnavailable()
             return
         }
-
+        
         let library = MetalDevice.shared.defaultLibrary ?? metalDevice.makeDefaultLibrary()
         self.commandQueue = sharedCommandQueue
-
-        // Получаем ссылку на конкретную kernel-функцию из шейдера.
-        // Имя "particleRendererShader" должно точно совпадать с kernel void в .metal файле.
+        
         guard let kernelFunction = library?.makeFunction(name: "particleRendererShader") else {
             particleLabDelegate?.particleLabMetalUnavailable()
             return
         }
-
-        // MTLComputePipelineState «выпекает» шейдер в оптимизированное состояние GPU.
-        // Создание занимает время (компиляция под конкретный GPU), поэтому делается один раз.
+        
         do {
             try pipelineState = metalDevice.makeComputePipelineState(function: kernelFunction)
         } catch {
             fatalError("makeComputePipelineState failed")
         }
-
-        // threadExecutionWidth — ширина SIMD-группы данного GPU (обычно 32 или 64 треда).
-        // Оптимально чтобы размер тредгруппы был кратен threadExecutionWidth —
-        // иначе часть SIMD-ячеек простаивает.
+        
         let threadExecutionWidth = pipelineState.threadExecutionWidth
-
+        
         threadsPerThreadgroup = MTLSize(width: threadExecutionWidth, height: 1, depth: 1)
-        // Итого тредов = threadgroupsPerGrid.width × threadsPerThreadgroup.width = particleCount
         threadgroupsPerGrid = MTLSize(width: particleCount / threadExecutionWidth, height: 1, depth: 1)
-
+        
         setUpForceAreaOverlayPipeline(device: device, library: library)
-
+        
         frameStartTime = CFAbsoluteTimeGetCurrent()
-
-        // Буферы размеров текстуры создаются один раз — они не меняются за время жизни view.
-        // .cpuCacheModeWriteCombined: CPU пишет последовательно, GPU читает — идеальный режим.
+        
         var imageWidthFloat = Float(imageWidth)
         var imageHeightFloat = Float(imageHeight)
-
+        
         imageWidthFloatBuffer = device.makeBuffer(
             bytes: &imageWidthFloat,
             length: MemoryLayout<Float>.stride,
             options: .cpuCacheModeWriteCombined
         )
-
+        
         imageHeightFloatBuffer = device.makeBuffer(
             bytes: &imageHeightFloat,
             length: MemoryLayout<Float>.stride,
             options: .cpuCacheModeWriteCombined
         )
-
+        
         setUpParticleRenderTexture(device: device)
     }
-
-    // ── Основной цикл рендеринга (вызывается MTKView каждый кадр) ─────────────
+    
     override func draw(_ dirtyRect: CGRect) {
         guard
             let device,
@@ -291,9 +239,9 @@ final class ParticleLab: MTKView {
             particleLabDelegate?.particleLabMetalUnavailable()
             return
         }
-
+        
         updateFrameStats()
-
+        
         guard
             let commandBuffer = commandQueue.makeCommandBuffer(),
             let frameResources = makeFrameResources(device: device),
@@ -301,11 +249,11 @@ final class ParticleLab: MTKView {
         else {
             return
         }
-
+        
         if clearOnStep {
             encodeClearParticleTexturePass(commandBuffer: commandBuffer, texture: particleRenderTexture)
         }
-
+        
         encodeParticlePass(
             commandBuffer: commandBuffer,
             pipelineState: pipelineState,
@@ -318,15 +266,13 @@ final class ParticleLab: MTKView {
             targetTexture: drawable.texture,
             resources: frameResources
         )
-
-        // present(drawable) — планирует показ готового кадра на экране после завершения GPU.
-        // commit() — отправляет весь commandBuffer в GPU-очередь на исполнение.
+        
         commandBuffer.present(drawable)
         commandBuffer.commit()
-
+        
         particleLabDelegate?.particleLabDidUpdate(status: statusPrefix + statusPostix)
     }
-
+    
     private func setUpParticleRenderTexture(device: MTLDevice) {
         let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: colorPixelFormat,
@@ -338,7 +284,7 @@ final class ParticleLab: MTKView {
         textureDescriptor.storageMode = .shared
         particleRenderTexture = device.makeTexture(descriptor: textureDescriptor)
     }
-
+    
     private func setUpForceAreaOverlayPipeline(device: MTLDevice, library: MTLLibrary?) {
         guard
             let library,
@@ -347,18 +293,17 @@ final class ParticleLab: MTKView {
         else {
             return
         }
-
+        
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.colorAttachments[0].pixelFormat = colorPixelFormat
-
-        // Финальный pass полностью заполняет экран, blending не требуется.
+        
         pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
-
+        
         forceAreaRenderPipelineState = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
-
+    
     private func updateFrameStats() {
         frameNumber += 1
         if frameNumber == 100 {
@@ -368,63 +313,63 @@ final class ParticleLab: MTKView {
             frameNumber = 0
         }
     }
-
+    
     private func encodeClearParticleTexturePass(commandBuffer: MTLCommandBuffer, texture: MTLTexture) {
         let descriptor = MTLRenderPassDescriptor()
         descriptor.colorAttachments[0].texture = texture
         descriptor.colorAttachments[0].loadAction = .clear
         descriptor.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
         descriptor.colorAttachments[0].storeAction = .store
-
+        
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
         encoder.endEncoding()
     }
-
+    
     private func makeFrameResources(device: MTLDevice) -> FrameResources? {
         guard let particlesMemory else { return nil }
-
+        
         let particlesBufferNoCopy = device.makeBuffer(
             bytesNoCopy: particlesMemory,
             length: particlesMemoryByteSize,
             options: .cpuCacheModeWriteCombined,
             deallocator: nil
         )
-
+        
         var localGravityWell = gravityWellParticle
         let gravityWellBuffer = device.makeBuffer(
             bytes: &localGravityWell,
             length: particleSize,
             options: .cpuCacheModeWriteCombined
         )
-
+        
         var localColor = particleColor
         let colorBuffer = device.makeBuffer(
             bytes: &localColor,
             length: MemoryLayout<ParticleColor>.stride,
             options: .cpuCacheModeWriteCombined
         )
-
+        
         var localDragFactor = dragFactor
         let dragFactorBuffer = device.makeBuffer(
             bytes: &localDragFactor,
             length: MemoryLayout<Float>.stride,
             options: .cpuCacheModeWriteCombined
         )
-
+        
         var localRespawnOutOfBoundsParticles = respawnOutOfBoundsParticles
         let respawnBuffer = device.makeBuffer(
             bytes: &localRespawnOutOfBoundsParticles,
             length: MemoryLayout<Bool>.stride,
             options: .cpuCacheModeWriteCombined
         )
-
+        
         var localWindZones = windZones
         let windZonesBuffer = device.makeBuffer(
             bytes: &localWindZones,
             length: MemoryLayout<WindZone>.stride * 4,
             options: .cpuCacheModeWriteCombined
         )
-
+        
         guard
             let particlesBufferNoCopy,
             let gravityWellBuffer,
@@ -435,7 +380,7 @@ final class ParticleLab: MTKView {
         else {
             return nil
         }
-
+        
         return FrameResources(
             particlesBufferNoCopy: particlesBufferNoCopy,
             gravityWellBuffer: gravityWellBuffer,
@@ -445,7 +390,7 @@ final class ParticleLab: MTKView {
             windZonesBuffer: windZonesBuffer
         )
     }
-
+    
     private func encodeParticlePass(
         commandBuffer: MTLCommandBuffer,
         pipelineState: MTLComputePipelineState,
@@ -453,7 +398,7 @@ final class ParticleLab: MTKView {
         resources: FrameResources
     ) {
         guard let commandEncoder = commandBuffer.makeComputeCommandEncoder() else { return }
-
+        
         commandEncoder.setComputePipelineState(pipelineState)
         commandEncoder.setBuffer(resources.particlesBufferNoCopy, offset: 0, index: 0)
         commandEncoder.setBuffer(resources.particlesBufferNoCopy, offset: 0, index: 1)
@@ -468,7 +413,7 @@ final class ParticleLab: MTKView {
         commandEncoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
         commandEncoder.endEncoding()
     }
-
+    
     private func encodeFinalCompositePass(
         commandBuffer: MTLCommandBuffer,
         particleTexture: MTLTexture,
@@ -478,19 +423,19 @@ final class ParticleLab: MTKView {
         guard let forceAreaRenderPipelineState else {
             return
         }
-
+        
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = targetTexture
         renderPassDescriptor.colorAttachments[0].loadAction = .dontCare
         renderPassDescriptor.colorAttachments[0].storeAction = .store
-
+        
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             return
         }
-
+        
         var viewportSize = SIMD2<Float>(Float(imageWidth), Float(imageHeight))
         var overlayEnabled: UInt32 = showForceAreas ? 1 : 0
-
+        
         renderEncoder.setRenderPipelineState(forceAreaRenderPipelineState)
         renderEncoder.setFragmentTexture(particleTexture, index: 0)
         renderEncoder.setFragmentBuffer(resources.windZonesBuffer, offset: 0, index: 0)
@@ -508,14 +453,7 @@ final class ParticleLab: MTKView {
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.endEncoding()
     }
-
-    // Устанавливает параметры зоны ветра по нормализованным координатам (0..1).
-    // index     — индекс зоны (0..3)
-    // normX/Y   — позиция центра в нормализованных координатах (0..1)
-    // radius    — радиус зоны в пикселях
-    // forceX/Y  — направление ветра (вектор не обязан быть нормализованным,
-    //             итоговая сила = force * strength * falloff)
-    // strength  — интенсивность (0 = зона отключена)
+    
     final func setWindZoneProperties(
         index: Int,
         normalisedPositionX: Float,
@@ -536,8 +474,7 @@ final class ParticleLab: MTKView {
             _pad1: 0
         )
     }
-
-    // Отключает все зоны ветра.
+    
     final func resetWindZones() {
         for i in 0..<4 {
             windZones[i] = WindZone(x: 0, y: 0, radius: 1, strength: 0, forceX: 0, forceY: 0, _pad0: 0, _pad1: 0)
