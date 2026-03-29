@@ -43,13 +43,25 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
         )
 
         super.init()
-
+    
+     
+        
         mtlView.particleLabDelegate = self
         mtlView.dragFactor = 0.95
         mtlView.respawnOutOfBoundsParticles = false
         mtlView.clearOnStep = true
         mtlView.resetParticles(false)
         mtlView.isMultipleTouchEnabled = true
+        let screenDiag = Float(hypot(size.width * scale, size.height * scale))
+        mtlView.setWindZoneProperties(
+            index: 0,
+            normalisedPositionX: 0.5,
+            normalisedPositionY: 0.5,
+            radius: screenDiag,
+            forceX: 0.0,
+            forceY: -1.8,
+            strength: 1.0
+        )
     }
 
     func particleLabMetalUnavailable() {
@@ -72,7 +84,7 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
         let speedBoost = max(1, min(pointerSpeed / 25, 4))
 
         mtlView.setGravityWellProperties(
-            gravityWellIndex: 0,
+            gravityWellIndex: 1,
             normalisedPositionX: normalisedX,
             normalisedPositionY: normalisedY,
             mass: 40 * speedBoost,
