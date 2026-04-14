@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		BE75EE8C1A6A2CC000B20D49 /* MetalParticles.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MetalParticles.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BE75EE8C1A6A2CC000B20D49 /* MetalParticlesPRV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MetalParticlesPRV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -16,7 +16,7 @@
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = BE75EE8B1A6A2CC000B20D49 /* MetalParticles */;
+			target = BE75EE8B1A6A2CC000B20D49 /* MetalParticlesPRV */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -46,7 +46,7 @@
 		BE75EE8D1A6A2CC000B20D49 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				BE75EE8C1A6A2CC000B20D49 /* MetalParticles.app */,
+				BE75EE8C1A6A2CC000B20D49 /* MetalParticlesPRV.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -54,9 +54,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		BE75EE8B1A6A2CC000B20D49 /* MetalParticles */ = {
+		BE75EE8B1A6A2CC000B20D49 /* MetalParticlesPRV */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = BE75EEAB1A6A2CC000B20D49 /* Build configuration list for PBXNativeTarget "MetalParticles" */;
+			buildConfigurationList = BE75EEAB1A6A2CC000B20D49 /* Build configuration list for PBXNativeTarget "MetalParticlesPRV" */;
 			buildPhases = (
 				BE75EE881A6A2CC000B20D49 /* Sources */,
 				BE75EE891A6A2CC000B20D49 /* Frameworks */,
@@ -69,9 +69,9 @@
 			fileSystemSynchronizedGroups = (
 				AD7EBEB02F78D63E00B1584B /* MetalParticles */,
 			);
-			name = MetalParticles;
+			name = MetalParticlesPRV;
 			productName = MetalParticles;
-			productReference = BE75EE8C1A6A2CC000B20D49 /* MetalParticles.app */;
+			productReference = BE75EE8C1A6A2CC000B20D49 /* MetalParticlesPRV.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -90,7 +90,7 @@
 					};
 				};
 			};
-			buildConfigurationList = BE75EE871A6A2CC000B20D49 /* Build configuration list for PBXProject "MetalParticles" */;
+			buildConfigurationList = BE75EE871A6A2CC000B20D49 /* Build configuration list for PBXProject "MetalParticlesPRV" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
@@ -104,7 +104,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				BE75EE8B1A6A2CC000B20D49 /* MetalParticles */,
+				BE75EE8B1A6A2CC000B20D49 /* MetalParticlesPRV */,
 			);
 		};
 /* End PBXProject section */
@@ -268,7 +268,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		BE75EE871A6A2CC000B20D49 /* Build configuration list for PBXProject "MetalParticles" */ = {
+		BE75EE871A6A2CC000B20D49 /* Build configuration list for PBXProject "MetalParticlesPRV" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				BE75EEA91A6A2CC000B20D49 /* Debug */,
@@ -277,7 +277,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		BE75EEAB1A6A2CC000B20D49 /* Build configuration list for PBXNativeTarget "MetalParticles" */ = {
+		BE75EEAB1A6A2CC000B20D49 /* Build configuration list for PBXNativeTarget "MetalParticlesPRV" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				BE75EEAC1A6A2CC000B20D49 /* Debug */,

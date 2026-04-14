@@ -1,29 +1,18 @@
 import Metal
 import MetalKit
+import MetalPerformanceShaders
 
 final class ParticleLab: MTKView {
     let imageWidth: UInt
     let imageHeight: UInt
     
-    private var imageWidthFloatBuffer: MTLBuffer!
-    private var imageHeightFloatBuffer: MTLBuffer!
-    
     private var particleRenderTexture: MTLTexture!
+    private var blurredParticleTexture: MTLTexture!
     
     private var pipelineState: MTLComputePipelineState!
-    private var commandQueue: MTLCommandQueue!
     
     private var threadsPerThreadgroup: MTLSize!
     private var threadgroupsPerGrid: MTLSize!
-    
-    private struct FrameResources {
-        let particlesBufferNoCopy: MTLBuffer
-        let gravityWellBuffer: MTLBuffer
-        let colorBuffer: MTLBuffer
-        let dragFactorBuffer: MTLBuffer
-        let respawnBuffer: MTLBuffer
-        let windZonesBuffer: MTLBuffer
-    }
     
     private var forceAreaRenderPipelineState: MTLRenderPipelineState!
     
@@ -46,13 +35,14 @@ final class ParticleLab: MTKView {
     
     private var frameStartTime: CFAbsoluteTime!
     private var frameNumber = 0
-    let particleSize = MemoryLayout<Particle>.stride
-    
     weak var particleLabDelegate: ParticleLabDelegate?
     
     var particleColor = ParticleColor(R: 1, G: 1.0, B: 1.0, A: 1)
     var dragFactor: Float = 0.97
     var respawnOutOfBoundsParticles = false
+    lazy var blur: MPSImageGaussianBlur = { [unowned self] in
+        MPSImageGaussianBlur(device: self.device!, sigma: 12.0)
+    }()
     
     var clearOnStep = true
     
@@ -180,7 +170,6 @@ final class ParticleLab: MTKView {
     
     private func setUpMetal() {
         let metalDevice = MetalDevice.shared.device
-        let sharedCommandQueue = MetalDevice.shared.commandQueue
         device = metalDevice
         
         guard let device else {
@@ -189,7 +178,6 @@ final class ParticleLab: MTKView {
         }
         
         let library = MetalDevice.shared.defaultLibrary ?? metalDevice.makeDefaultLibrary()
-        self.commandQueue = sharedCommandQueue
         
         guard let kernelFunction = library?.makeFunction(name: "particleRendererShader") else {
             particleLabDelegate?.particleLabMetalUnavailable()
@@ -207,73 +195,24 @@ final class ParticleLab: MTKView {
         threadsPerThreadgroup = MTLSize(width: threadExecutionWidth, height: 1, depth: 1)
         threadgroupsPerGrid = MTLSize(width: particleCount / threadExecutionWidth, height: 1, depth: 1)
         
-        setUpForceAreaOverlayPipeline(device: device, library: library)
-        
-        frameStartTime = CFAbsoluteTimeGetCurrent()
-        
-        var imageWidthFloat = Float(imageWidth)
-        var imageHeightFloat = Float(imageHeight)
-        
-        imageWidthFloatBuffer = device.makeBuffer(
-            bytes: &imageWidthFloat,
-            length: MemoryLayout<Float>.stride,
-            options: .cpuCacheModeWriteCombined
-        )
-        
-        imageHeightFloatBuffer = device.makeBuffer(
-            bytes: &imageHeightFloat,
-            length: MemoryLayout<Float>.stride,
-            options: .cpuCacheModeWriteCombined
-        )
-        
-        setUpParticleRenderTexture(device: device)
-    }
-    
-    override func draw(_ dirtyRect: CGRect) {
         guard
-            let device,
-            let commandQueue,
-            let pipelineState,
-            let particleRenderTexture
+            let library,
+            let vertexFunction = library.makeFunction(name: "forceAreaOverlayVertex"),
+            let fragmentFunction = library.makeFunction(name: "forceAreaOverlayFragment")
         else {
             particleLabDelegate?.particleLabMetalUnavailable()
             return
         }
+
+        let pipelineDescriptor = MTLRenderPipelineDescriptor()
+        pipelineDescriptor.vertexFunction = vertexFunction
+        pipelineDescriptor.fragmentFunction = fragmentFunction
+        pipelineDescriptor.colorAttachments[0].pixelFormat = colorPixelFormat
+        pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
+        forceAreaRenderPipelineState = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         
-        updateFrameStats()
-        
-        guard
-            let commandBuffer = commandQueue.makeCommandBuffer(),
-            let frameResources = makeFrameResources(device: device),
-            let drawable = currentDrawable
-        else {
-            return
-        }
-        
-        if clearOnStep {
-            encodeClearParticleTexturePass(commandBuffer: commandBuffer, texture: particleRenderTexture)
-        }
-        
-        encodeParticlePass(
-            commandBuffer: commandBuffer,
-            pipelineState: pipelineState,
-            targetTexture: particleRenderTexture,
-            resources: frameResources
-        )
-        encodeFinalCompositePass(
-            commandBuffer: commandBuffer,
-            particleTexture: particleRenderTexture,
-            targetTexture: drawable.texture,
-            resources: frameResources
-        )
-        
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
-        
-        particleLabDelegate?.particleLabDidUpdate(status: statusPrefix + statusPostix)
-    }
-    
-    private func setUpParticleRenderTexture(device: MTLDevice) {
+        frameStartTime = CFAbsoluteTimeGetCurrent()
+
         let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: colorPixelFormat,
             width: Int(imageWidth),
@@ -283,28 +222,24 @@ final class ParticleLab: MTKView {
         textureDescriptor.usage = [.shaderRead, .shaderWrite, .renderTarget]
         textureDescriptor.storageMode = .shared
         particleRenderTexture = device.makeTexture(descriptor: textureDescriptor)
+        blurredParticleTexture = device.makeTexture(descriptor: textureDescriptor)
     }
     
-    private func setUpForceAreaOverlayPipeline(device: MTLDevice, library: MTLLibrary?) {
+    override func draw(_ dirtyRect: CGRect) {
         guard
-            let library,
-            let vertexFunction = library.makeFunction(name: "forceAreaOverlayVertex"),
-            let fragmentFunction = library.makeFunction(name: "forceAreaOverlayFragment")
+            let device,
+            let particleRenderTexture,
+            let blurredParticleTexture,
+            let pipelineState,
+            let forceAreaRenderPipelineState,
+            let commandBuffer = MetalDevice.shared.commandQueue.makeCommandBuffer(),
+            let drawable = currentDrawable,
+            let particlesMemory
         else {
+            particleLabDelegate?.particleLabMetalUnavailable()
             return
         }
-        
-        let pipelineDescriptor = MTLRenderPipelineDescriptor()
-        pipelineDescriptor.vertexFunction = vertexFunction
-        pipelineDescriptor.fragmentFunction = fragmentFunction
-        pipelineDescriptor.colorAttachments[0].pixelFormat = colorPixelFormat
-        
-        pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
-        
-        forceAreaRenderPipelineState = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
-    }
-    
-    private func updateFrameStats() {
+
         frameNumber += 1
         if frameNumber == 100 {
             let frametime = (CFAbsoluteTimeGetCurrent() - frameStartTime) / 100
@@ -312,64 +247,49 @@ final class ParticleLab: MTKView {
             frameStartTime = CFAbsoluteTimeGetCurrent()
             frameNumber = 0
         }
-    }
-    
-    private func encodeClearParticleTexturePass(commandBuffer: MTLCommandBuffer, texture: MTLTexture) {
-        let descriptor = MTLRenderPassDescriptor()
-        descriptor.colorAttachments[0].texture = texture
-        descriptor.colorAttachments[0].loadAction = .clear
-        descriptor.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
-        descriptor.colorAttachments[0].storeAction = .store
-        
-        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
-        encoder.endEncoding()
-    }
-    
-    private func makeFrameResources(device: MTLDevice) -> FrameResources? {
-        guard let particlesMemory else { return nil }
-        
+
         let particlesBufferNoCopy = device.makeBuffer(
             bytesNoCopy: particlesMemory,
             length: particlesMemoryByteSize,
             options: .cpuCacheModeWriteCombined,
             deallocator: nil
         )
-        
+
         var localGravityWell = gravityWellParticle
         let gravityWellBuffer = device.makeBuffer(
             bytes: &localGravityWell,
-            length: particleSize,
+            length: MemoryLayout<Particle>.stride,
             options: .cpuCacheModeWriteCombined
         )
-        
+
         var localColor = particleColor
         let colorBuffer = device.makeBuffer(
             bytes: &localColor,
             length: MemoryLayout<ParticleColor>.stride,
             options: .cpuCacheModeWriteCombined
         )
-        
+
         var localDragFactor = dragFactor
         let dragFactorBuffer = device.makeBuffer(
             bytes: &localDragFactor,
             length: MemoryLayout<Float>.stride,
             options: .cpuCacheModeWriteCombined
         )
-        
+
         var localRespawnOutOfBoundsParticles = respawnOutOfBoundsParticles
         let respawnBuffer = device.makeBuffer(
             bytes: &localRespawnOutOfBoundsParticles,
             length: MemoryLayout<Bool>.stride,
             options: .cpuCacheModeWriteCombined
         )
-        
+
         var localWindZones = windZones
         let windZonesBuffer = device.makeBuffer(
             bytes: &localWindZones,
             length: MemoryLayout<WindZone>.stride * 4,
             options: .cpuCacheModeWriteCombined
         )
-        
+
         guard
             let particlesBufferNoCopy,
             let gravityWellBuffer,
@@ -378,80 +298,67 @@ final class ParticleLab: MTKView {
             let respawnBuffer,
             let windZonesBuffer
         else {
-            return nil
+            return
         }
-        
-        return FrameResources(
-            particlesBufferNoCopy: particlesBufferNoCopy,
-            gravityWellBuffer: gravityWellBuffer,
-            colorBuffer: colorBuffer,
-            dragFactorBuffer: dragFactorBuffer,
-            respawnBuffer: respawnBuffer,
-            windZonesBuffer: windZonesBuffer
+
+        if clearOnStep {
+            let clearDescriptor = MTLRenderPassDescriptor()
+            clearDescriptor.colorAttachments[0].texture = particleRenderTexture
+            clearDescriptor.colorAttachments[0].loadAction = .clear
+            clearDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+            clearDescriptor.colorAttachments[0].storeAction = .store
+            commandBuffer.makeRenderCommandEncoder(descriptor: clearDescriptor)?.endEncoding()
+        }
+
+        if let computeEncoder = commandBuffer.makeComputeCommandEncoder() {
+            var imageWidthFloat = Float(imageWidth)
+            var imageHeightFloat = Float(imageHeight)
+
+            computeEncoder.setComputePipelineState(pipelineState)
+            computeEncoder.setBuffer(particlesBufferNoCopy, offset: 0, index: 0)
+            computeEncoder.setBuffer(particlesBufferNoCopy, offset: 0, index: 1)
+            computeEncoder.setBuffer(gravityWellBuffer, offset: 0, index: 2)
+            computeEncoder.setBuffer(colorBuffer, offset: 0, index: 3)
+            computeEncoder.setBytes(&imageWidthFloat, length: MemoryLayout<Float>.stride, index: 4)
+            computeEncoder.setBytes(&imageHeightFloat, length: MemoryLayout<Float>.stride, index: 5)
+            computeEncoder.setBuffer(dragFactorBuffer, offset: 0, index: 6)
+            computeEncoder.setBuffer(respawnBuffer, offset: 0, index: 7)
+            computeEncoder.setBuffer(windZonesBuffer, offset: 0, index: 8)
+            computeEncoder.setTexture(particleRenderTexture, index: 0)
+            computeEncoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+            computeEncoder.endEncoding()
+        }
+
+        blur.encode(
+            commandBuffer: commandBuffer,
+            sourceTexture: particleRenderTexture,
+            destinationTexture: blurredParticleTexture
         )
-    }
-    
-    private func encodeParticlePass(
-        commandBuffer: MTLCommandBuffer,
-        pipelineState: MTLComputePipelineState,
-        targetTexture: MTLTexture,
-        resources: FrameResources
-    ) {
-        guard let commandEncoder = commandBuffer.makeComputeCommandEncoder() else { return }
-        
-        commandEncoder.setComputePipelineState(pipelineState)
-        commandEncoder.setBuffer(resources.particlesBufferNoCopy, offset: 0, index: 0)
-        commandEncoder.setBuffer(resources.particlesBufferNoCopy, offset: 0, index: 1)
-        commandEncoder.setBuffer(resources.gravityWellBuffer, offset: 0, index: 2)
-        commandEncoder.setBuffer(resources.colorBuffer, offset: 0, index: 3)
-        commandEncoder.setBuffer(imageWidthFloatBuffer, offset: 0, index: 4)
-        commandEncoder.setBuffer(imageHeightFloatBuffer, offset: 0, index: 5)
-        commandEncoder.setBuffer(resources.dragFactorBuffer, offset: 0, index: 6)
-        commandEncoder.setBuffer(resources.respawnBuffer, offset: 0, index: 7)
-        commandEncoder.setBuffer(resources.windZonesBuffer, offset: 0, index: 8)
-        commandEncoder.setTexture(targetTexture, index: 0)
-        commandEncoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
-        commandEncoder.endEncoding()
-    }
-    
-    private func encodeFinalCompositePass(
-        commandBuffer: MTLCommandBuffer,
-        particleTexture: MTLTexture,
-        targetTexture: MTLTexture,
-        resources: FrameResources
-    ) {
-        guard let forceAreaRenderPipelineState else {
-            return
-        }
-        
-        let renderPassDescriptor = MTLRenderPassDescriptor()
-        renderPassDescriptor.colorAttachments[0].texture = targetTexture
-        renderPassDescriptor.colorAttachments[0].loadAction = .dontCare
-        renderPassDescriptor.colorAttachments[0].storeAction = .store
-        
-        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            return
-        }
-        
+
         var viewportSize = SIMD2<Float>(Float(imageWidth), Float(imageHeight))
         var overlayEnabled: UInt32 = showForceAreas ? 1 : 0
-        
-        renderEncoder.setRenderPipelineState(forceAreaRenderPipelineState)
-        renderEncoder.setFragmentTexture(particleTexture, index: 0)
-        renderEncoder.setFragmentBuffer(resources.windZonesBuffer, offset: 0, index: 0)
-        renderEncoder.setFragmentBuffer(resources.gravityWellBuffer, offset: 0, index: 1)
-        renderEncoder.setFragmentBytes(
-            &viewportSize,
-            length: MemoryLayout<SIMD2<Float>>.stride,
-            index: 2
-        )
-        renderEncoder.setFragmentBytes(
-            &overlayEnabled,
-            length: MemoryLayout<UInt32>.stride,
-            index: 3
-        )
-        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-        renderEncoder.endEncoding()
+
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = drawable.texture
+        renderPassDescriptor.colorAttachments[0].loadAction = .dontCare
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+
+        if let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) {
+            renderEncoder.setRenderPipelineState(forceAreaRenderPipelineState)
+            renderEncoder.setFragmentTexture(particleRenderTexture, index: 0)
+            renderEncoder.setFragmentTexture(blurredParticleTexture, index: 1)
+            renderEncoder.setFragmentBuffer(windZonesBuffer, offset: 0, index: 0)
+            renderEncoder.setFragmentBuffer(gravityWellBuffer, offset: 0, index: 1)
+            renderEncoder.setFragmentBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 2)
+            renderEncoder.setFragmentBytes(&overlayEnabled, length: MemoryLayout<UInt32>.stride, index: 3)
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            renderEncoder.endEncoding()
+        }
+
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
+
+        particleLabDelegate?.particleLabDidUpdate(status: statusPrefix + statusPostix)
     }
     
     final func setWindZoneProperties(

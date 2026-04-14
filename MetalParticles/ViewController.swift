@@ -38,7 +38,7 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
         mtlView = ParticleLab(
             width: UInt((size.width * scale).rounded()),
             height: UInt((size.height * scale).rounded()),
-            numParticles: .eightMillion,
+            numParticles: .oneMillion,
             hiDPI: true
         )
 
