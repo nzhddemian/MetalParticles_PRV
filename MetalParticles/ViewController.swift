@@ -26,6 +26,14 @@ protocol InputReceiver {
 
 final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, InputReceiver {
     let mtlView: ParticleLab
+    private struct StaticSpot {
+        let index: Int
+        let x: Float
+        let y: Float
+        let mass: Float
+        let spin: Float
+    }
+    private var staticSpots: [StaticSpot] = []
 
     private var pointerPosition: SIMD2<Float>?
     private var pointerSpeed: Float = 0
@@ -62,6 +70,18 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
             forceY: -1.8,
             strength: 1.0
         )
+
+        // Keep one gravity well (index 0) reserved for touch.
+        // Use indices 1...3 for static random spots.
+        staticSpots = (1...3).map { i in
+            StaticSpot(
+                index: i,
+                x: Float.random(in: 0.15...0.85),
+                y: Float.random(in: 0.15...0.85),
+                mass: Float.random(in: 6...270),
+                spin: Float.random(in: -110...110)
+            )
+        }
     }
 
     func particleLabMetalUnavailable() {
@@ -70,6 +90,16 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
 
     func particleLabDidUpdate(status: String) {
         mtlView.resetGravityWells()
+
+        for spot in staticSpots {
+            mtlView.setGravityWellProperties(
+                gravityWellIndex: spot.index,
+                normalisedPositionX: spot.x,
+                normalisedPositionY: spot.y,
+                mass: spot.mass,
+                spin: spot.spin
+            )
+        }
 
         guard
             let pointerPosition,
@@ -83,11 +113,12 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
         let normalisedY = Float(pointerPosition.y / Float(mtlView.bounds.height))
         let speedBoost = max(1, min(pointerSpeed / 25, 4))
 
+        // Touch-controlled main spot (index 0).
         mtlView.setGravityWellProperties(
-            gravityWellIndex: 1,
-            normalisedPositionX: normalisedX,
-            normalisedPositionY: normalisedY,
-            mass: 40 * speedBoost,
+            gravityWellIndex: 0,
+            normalisedPositionX: min(max(normalisedX, 0), 1),
+            normalisedPositionY: min(max(normalisedY, 0), 1),
+            mass: 54 * speedBoost,
             spin: 20 * speedBoost
         )
     }
