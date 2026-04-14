@@ -74,6 +74,9 @@ struct WindZone {
     float2 force;     // вектор направления ветра (пиксели/кадр² на единицу)
     float2 _pad;      // выравнивание структуры до 32 байт
 };
+float3 palett(float v ) {
+    return float3(0.26) + tan(1.09)*sin(1.09)*0.26 * cos(3.18318 * (v + float3(0.0,0.333,0.567)));
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: суммарное ускорение от зон ветра
@@ -277,8 +280,9 @@ fragment float4 forceAreaOverlayFragment(
     // Bloom: смешиваем исходную и размытую текстуру частиц.
     const float4 particlesSource = particlesTexture.sample(linearSampler, in.uv);
     const float4 particlesBlurred = blurredParticlesTexture.sample(linearSampler, in.uv);
-    const float4 particlesBase = saturate((particlesSource * 0.75) + (particlesBlurred * 1.35));
-
+     float4 particlesBase = saturate((particlesSource * 0.75) + (particlesBlurred * 1.35));
+    float3 pltt = palett(particlesBase.r*12.0).rgb*particlesBase.r;
+    particlesBase.rgb = mix(particlesBase.rgb,pltt,1.0 - particlesBase.rgb);
     if (overlayEnabled == 0u) {
         return particlesBase;
     }
@@ -313,17 +317,11 @@ fragment float4 forceAreaOverlayFragment(
         const float radius = 55.0 + mass * 1.8;
         const float forceArea = distance(pixelPos, wellPos);
 
-        float fill = (1.0 - smoothstep(0.0, radius, forceArea)) * 0.09;
+        float fill = (1.0 - smoothstep(0.0, radius/1.5, forceArea)) ;
 
-        float ring = smoothstep(radius * 0.87, radius * 0.95, forceArea)
-                   * (1.0 - smoothstep(radius * 0.95, radius * 1.0, forceArea));
-        ring *= 0.65;
-
-        float dot = 1.0 - smoothstep(0.0, radius * 0.06, forceArea);
-
-        float4 color = float4(0.5) * (fill + ring + dot);
-//        overlay = saturate(overlay + color);
+        float4 color = float4(0.5) * (fill * 1.1) ;
+        overlay = saturate(overlay + color);
     }
 
-    return saturate(particlesBase*3. + overlay);
+    return saturate(particlesBase + (overlay * 1.15));
 }

@@ -28,12 +28,13 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
     let mtlView: ParticleLab
     private struct StaticSpot {
         let index: Int
-        let x: Float
-        let y: Float
+        var x: Float
+        var y: Float
         let mass: Float
         let spin: Float
     }
     private var staticSpots: [StaticSpot] = []
+    private var draggedStaticSpotArrayIndex: Int?
 
     private var pointerPosition: SIMD2<Float>?
     private var pointerSpeed: Float = 0
@@ -109,6 +110,10 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
             return
         }
 
+        guard draggedStaticSpotArrayIndex == nil else {
+            return
+        }
+
         let normalisedX = Float(pointerPosition.x / Float(mtlView.bounds.width))
         let normalisedY = Float(pointerPosition.y / Float(mtlView.bounds.height))
         let speedBoost = max(1, min(pointerSpeed / 25, 4))
@@ -124,16 +129,59 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
     }
 
     func handleInput(_ event: InputEvent) {
+        func clamp01(_ v: Float) -> Float {
+            min(max(v, 0), 1)
+        }
+
+        func normalisedPosition(from pointer: SIMD2<Float>) -> SIMD2<Float>? {
+            guard mtlView.bounds.width > 0, mtlView.bounds.height > 0 else { return nil }
+            let x = Float(pointer.x / Float(mtlView.bounds.width))
+            let y = Float(pointer.y / Float(mtlView.bounds.height))
+            return SIMD2<Float>(clamp01(x), clamp01(y))
+        }
+
+        func pointForSpot(_ spot: StaticSpot) -> SIMD2<Float> {
+            SIMD2<Float>(
+                spot.x * Float(mtlView.bounds.width),
+                spot.y * Float(mtlView.bounds.height)
+            )
+        }
+
+        func spotRadiusPoints(_ spot: StaticSpot) -> Float {
+            guard mtlView.bounds.width > 0 else { return 0 }
+            let textureToViewScale = Float(mtlView.bounds.width) / Float(mtlView.imageWidth)
+            return (55.0 + spot.mass * 1.8) * textureToViewScale
+        }
+
         switch event {
         case let .pointerDown(position):
             pointerPosition = position
             pointerSpeed = 0
+            draggedStaticSpotArrayIndex = staticSpots.firstIndex { spot in
+                let center = pointForSpot(spot)
+                let radius = spotRadiusPoints(spot)
+                return simd_length(position - center) <= radius
+            }
+
+            if let draggedStaticSpotArrayIndex,
+               let n = normalisedPosition(from: position) {
+                staticSpots[draggedStaticSpotArrayIndex].x = n.x
+                staticSpots[draggedStaticSpotArrayIndex].y = n.y
+            }
+
         case let .pointerMove(position, _, speed):
             pointerPosition = position
             pointerSpeed = speed
+            if let draggedStaticSpotArrayIndex,
+               let n = normalisedPosition(from: position) {
+                staticSpots[draggedStaticSpotArrayIndex].x = n.x
+                staticSpots[draggedStaticSpotArrayIndex].y = n.y
+            }
+
         case .pointerUp:
             pointerPosition = nil
             pointerSpeed = 0
+            draggedStaticSpotArrayIndex = nil
         }
     }
 
