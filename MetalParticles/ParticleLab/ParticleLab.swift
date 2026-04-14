@@ -19,10 +19,10 @@ final class ParticleLab: MTKView {
     var showForceAreas: Bool = true
     
     let particleCount: Int
-    let alignment: Int = 0x4000
     let particlesMemoryByteSize: Int
     
-    private var particlesMemory: UnsafeMutableRawPointer?
+    /// Particle data lives in this shared buffer (avoids `makeBuffer(bytesNoCopy:)`, which traps on Simulator).
+    private var particlesBuffer: MTLBuffer?
     private var particlesParticlePtr: UnsafeMutablePointer<Particle>!
     private var particlesParticleBufferPtr: UnsafeMutableBufferPointer<Particle>!
     
@@ -92,19 +92,17 @@ final class ParticleLab: MTKView {
         fatalError("init(coder:) has not been implemented")
     }
     
-    deinit {
-        if let particlesMemory {
-            free(particlesMemory)
-        }
-    }
     
     private func setUpParticles() {
-        let result = posix_memalign(&particlesMemory, alignment, particlesMemoryByteSize)
-        guard result == 0, let particlesMemory else {
-            fatalError("posix_memalign failed with code \(result)")
+        guard let buffer = MetalDevice.shared.device.makeBuffer(
+            length: particlesMemoryByteSize,
+            options: .storageModeShared
+        ) else {
+            fatalError("makeBuffer(length:options:) failed for particle storage")
         }
-        
-        particlesParticlePtr = particlesMemory.bindMemory(to: Particle.self, capacity: particleCount)
+        particlesBuffer = buffer
+        let base = buffer.contents()
+        particlesParticlePtr = base.bindMemory(to: Particle.self, capacity: particleCount)
         particlesParticleBufferPtr = UnsafeMutableBufferPointer(start: particlesParticlePtr, count: particleCount)
         
         resetParticles(true)
@@ -234,7 +232,7 @@ final class ParticleLab: MTKView {
             let forceAreaRenderPipelineState,
             let commandBuffer = MetalDevice.shared.commandQueue.makeCommandBuffer(),
             let drawable = currentDrawable,
-            let particlesMemory
+            let particlesBuffer
         else {
             particleLabDelegate?.particleLabMetalUnavailable()
             return
@@ -247,13 +245,6 @@ final class ParticleLab: MTKView {
             frameStartTime = CFAbsoluteTimeGetCurrent()
             frameNumber = 0
         }
-
-        let particlesBufferNoCopy = device.makeBuffer(
-            bytesNoCopy: particlesMemory,
-            length: particlesMemoryByteSize,
-            options: .cpuCacheModeWriteCombined,
-            deallocator: nil
-        )
 
         var localGravityWell = gravityWellParticle
         let gravityWellBuffer = device.makeBuffer(
@@ -291,7 +282,6 @@ final class ParticleLab: MTKView {
         )
 
         guard
-            let particlesBufferNoCopy,
             let gravityWellBuffer,
             let colorBuffer,
             let dragFactorBuffer,
@@ -315,8 +305,8 @@ final class ParticleLab: MTKView {
             var imageHeightFloat = Float(imageHeight)
 
             computeEncoder.setComputePipelineState(pipelineState)
-            computeEncoder.setBuffer(particlesBufferNoCopy, offset: 0, index: 0)
-            computeEncoder.setBuffer(particlesBufferNoCopy, offset: 0, index: 1)
+            computeEncoder.setBuffer(particlesBuffer, offset: 0, index: 0)
+            computeEncoder.setBuffer(particlesBuffer, offset: 0, index: 1)
             computeEncoder.setBuffer(gravityWellBuffer, offset: 0, index: 2)
             computeEncoder.setBuffer(colorBuffer, offset: 0, index: 3)
             computeEncoder.setBytes(&imageWidthFloat, length: MemoryLayout<Float>.stride, index: 4)

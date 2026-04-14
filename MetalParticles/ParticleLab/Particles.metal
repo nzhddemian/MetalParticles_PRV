@@ -102,6 +102,18 @@ inline float2 windAcceleration(float2 pos, constant WindZone* zones) {
     return accel;
 }
 
+//
+//float diffuseSphereLayer(float2 uv)
+//{
+//    float dist = length(uv);
+//    if(dist > 0.2) return 0.0;
+//    float z = sqrt(0.04 - dist*dist);
+//    float3 normal = normalize(float3(uv, z));
+//    float3 light = float3(0.0, 0.0, 1.0);
+//    return max(0.0, dot(normal, light));
+//}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: тороидальный перенос позиции (wrap-around)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -264,6 +276,16 @@ vertex OverlayVertexOut forceAreaOverlayVertex(uint vertexID [[vertex_id]]) {
     return out;
 }
 
+float diffuseSphereLayer(float2 uv)
+{
+    float dist = length(uv);
+    if(dist > 0.2) return 0.0;
+    float z = sqrt(0.04 - dist * dist);
+    float3 normal = normalize(float3(uv, z));
+    float3 light = float3(0.0, 0.0, 1.0);
+    return max(0.0, dot(normal, light));
+}
+
 fragment float4 forceAreaOverlayFragment(
     OverlayVertexOut in [[stage_in]],
     texture2d<float, access::sample> particlesTexture [[texture(0)]],
@@ -314,12 +336,13 @@ fragment float4 forceAreaOverlayFragment(
         if (mass <= 0.0) continue;
 
         const float2 wellPos = float2(gravityWell[i].x, gravityWell[i].y);
-        const float radius = 55.0 + mass * 1.8;
+        const float radius =  (mass) + 12.0 ;
         const float forceArea = distance(pixelPos, wellPos);
 
-        float fill = (1.0 - smoothstep(0.0, radius/1.5, forceArea)) ;
+        const float2 localUV = (pixelPos - wellPos) / radius;
+        float fill = diffuseSphereLayer(localUV);
 
-        float4 color = float4(0.5) * (fill * 1.1) ;
+        float4 color =  float4(palett(fill * 2 )*fill + fill, 1.0);
         overlay = saturate(overlay + color);
     }
 
