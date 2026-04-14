@@ -117,6 +117,27 @@ inline float2 wrapPosition(float2 pos, float w, float h) {
     return float2(x, y);
 }
 
+// Дешёвый hash/noise для лёгкого "живого" дрейфа частиц.
+inline float hash21(float2 p) {
+    p = fract(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+inline float2 subtleNoiseDrift(float2 pos, float seed) {
+    const float2 p = pos * 0.0065 + seed * 0.017;
+    const float n1 = hash21(p);
+    const float n2 = hash21(p.yx + 19.37);
+
+    // Низкоамплитудная смесь синуса и псевдошума.
+    const float sx = fast::sin(p.y * 2.1 + seed * 0.31);
+    const float sy = fast::cos(p.x * 1.9 + seed * 0.27);
+    const float2 wobble = float2(sx, sy) * 0.2;
+    const float2 noise = (float2(n1, n2) - 0.5) * 0.03;
+
+    return wobble + noise;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // KERNEL: particleRendererShader
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -194,8 +215,10 @@ kernel void particleRendererShader(
         }
 
         const float2 windAccel = windAcceleration(pos, windZones);
+        const float seed = float(id * 4u + i);
+        const float2 noiseDrift = subtleNoiseDrift(pos, seed);
         float2 nextPos = wrapPosition(pos + vel, imageWidth, imageHeight);
-        const float2 nextVel = (vel * dragFactor) + gravityAndSpinAccel + windAccel;
+        const float2 nextVel = (vel * dragFactor) + gravityAndSpinAccel + windAccel + noiseDrift;
 
         outParticle[i] = float4(nextPos, nextVel);
     }
