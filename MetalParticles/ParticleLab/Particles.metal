@@ -131,6 +131,54 @@ inline float2 wrapPosition(float2 pos, float w, float h) {
     if (y > h + margin) y = -margin;
     return float2(x, y);
 }
+constexpr sampler samChroma(mag_filter::linear, min_filter::linear,address::clamp_to_edge);
+float3 chromatic_aberration(float2 uv,texture2d<float>  image,float value,float2 pos) {
+//float3 chromatic_aberration(float2 uv, float2 res, float value) {
+// half4 chromatic_aberration(float2 uv,texture2d<half>  image,float value) {
+//              var inputBlur: CGFloat = 10
+//                var inputFalloff: CGFloat = 0.2
+//                var inputSamples: CGFloat = 10
+    pos.y = 1.0 - pos.y;
+              float sampleCount = 10.0;
+   int sampleCountInt = int(floor(sampleCount));
+   float4 accumulator = float4(0.01);
+     float2 res = float2(image.get_width(),image.get_height());
+             float2 size = res;
+        float adaptiveValue = res.y/1080.;
+
+           
+//            adaptiveValue *= value;
+   
+             float blurF = 5. * adaptiveValue;
+             float start = 0.0;
+             
+    float2 dc = uv*res;
+    float normalisedValue = length(((dc / size) - pos) * 2.0);
+    float strength = clamp((normalisedValue - start) * (1.0 / (1.0 - start)), 0.0, 1.0);
+    strength *= value;
+    float2 vector = normalize((dc - pos*res) / size) ;
+    float2 velocity = vector * strength * blurF;
+           
+   float2 redOffset = -vector * strength * (blurF * 1.0);
+   float2 greenOffset = -vector * strength * (blurF * 1.5);
+   float2 blueOffset = -vector * strength * (blurF * 2.0);
+
+   for (float i=0.0; i < sampleCount; i++) {
+    
+       accumulator.r += image.sample(samChroma, ( dc + redOffset) / res).r;
+       redOffset -= velocity / sampleCount;
+
+       accumulator.g += image.sample(samChroma,  ( dc + greenOffset) / res).g;
+       greenOffset -= velocity / sampleCount;
+
+       accumulator.b += image.sample(samChroma, (  dc + blueOffset) / res).b;
+       blueOffset -= velocity / sampleCount;
+   }
+    
+   return float3(accumulator / float(sampleCountInt));
+}
+
+
 
 // Дешёвый hash/noise для лёгкого "живого" дрейфа частиц.
 inline float hash21(float2 p) {
@@ -221,7 +269,7 @@ kernel void particleRendererShader(
             const float2 delta = inGravityWell[well].xy - pos;
             const float distSq = fast::max(dot(delta, delta), DIST_SQ_MIN);
             const float invDistSq = 1.0 / distSq;
-            const float mass = inGravityWell[well].z * typeTweak;
+            const float mass = inGravityWell[well].z * 1.;
             const float spin = inGravityWell[well].w * 2.1;
 
             // Радиальная гравитация + тангенциальный спин. 
@@ -231,7 +279,7 @@ kernel void particleRendererShader(
 
         const float2 windAccel = windAcceleration(pos, windZones);
         const float seed = float(id * 4u + i);
-        const float2 noiseDrift = subtleNoiseDrift(pos, seed);
+        const float2 noiseDrift = subtleNoiseDrift(pos, seed)*3.;
         float2 nextPos = wrapPosition(pos + vel, imageWidth, imageHeight);
         const float2 nextVel = (vel * dragFactor) + gravityAndSpinAccel + windAccel + noiseDrift;
 
@@ -276,6 +324,79 @@ vertex OverlayVertexOut forceAreaOverlayVertex(uint vertexID [[vertex_id]]) {
     return out;
 }
 
+float2 glassUV(float2 uv, float2 u_resolution, float4 rect)
+{
+    // fallback mouse to center
+       float2  mouse = u_resolution.xy * rect.xy;
+    // }
+
+    float2 m2 = uv - mouse / u_resolution.xy;
+    m2.x *= u_resolution.x / u_resolution.y;
+    // rect.w *= u_resolution.x / u_resolution.y;
+    float roundedBox =
+        pow(abs(m2.x), u_resolution.x/4.0*rect.z) +
+        pow(abs(m2.y), u_resolution.y/4.0*rect.w);
+
+    float rb1 = clamp((1.0 - roundedBox * 10000.0) * 8.0, 0.0, 1.0);
+    float rb2 =
+        clamp((0.95 - roundedBox * 9500.0) * 16.0, 0.0, 1.0) -
+        clamp(pow(0.9 - roundedBox * 9500.0, 1.0) * 16.0, 0.0, 1.0);
+
+    float4 fragColor = float4(0.0);
+
+    float transition = smoothstep(0.0, 1.0, rb1 + rb2);
+
+    float2 lens =
+        ((uv - 0.5) *
+        (1.0 - roundedBox * 5000.0)) +
+        0.5;
+
+    float2 offset =
+        float2(1, 1) *
+        0.5 /
+        u_resolution.xy;
+
+    float2 fracteUv = mix(uv, lens + offset, transition);
+    return fracteUv;
+}
+float2 glassUV(float2 uv, float2 u_resolution, float4 rect, float intensity)
+{
+    // fallback mouse to center
+       float2  mouse = u_resolution.xy * rect.xy;
+    // }
+
+    float2 m2 = uv - mouse / u_resolution.xy;
+    m2.x *= u_resolution.x / u_resolution.y;
+    // rect.w *= u_resolution.x / u_resolution.y;
+    float roundedBox =
+        pow(abs(m2.x), u_resolution.x/4.0*rect.z) +
+        pow(abs(m2.y), u_resolution.y/4.0*rect.w);
+
+    float rb1 = clamp((1.0 - roundedBox * 10000.0) * 8.0, 0.0, 1.0);
+    float rb2 =
+        clamp((0.95 - roundedBox * 9500.0) * 16.0, 0.0, 1.0) -
+        clamp(pow(0.9 - roundedBox * 9500.0, 1.0) * 16.0, 0.0, 1.0);
+
+    float4 fragColor = float4(0.0);
+
+    float transition = smoothstep(0.0, intensity, rb1 + rb2);
+
+    float2 lens =
+        ((uv - 0.5) *
+        (1.0 - roundedBox * 5000.0)) +
+        0.5;
+
+    float2 offset =
+        float2(1, 1) *
+        0.5 /
+        u_resolution.xy;
+
+    float2 fracteUv = mix(uv, lens + offset, transition);
+    fracteUv = mix(uv, fracteUv, intensity);
+    return fracteUv;
+}
+
+
 float diffuseSphereLayer(float2 uv)
 {
     float dist = length(uv);
@@ -285,7 +406,7 @@ float diffuseSphereLayer(float2 uv)
     float3 light = float3(0.0, 0.0, 1.0);
     return max(0.0, dot(normal, light));
 }
-
+#define     clp(x) clamp(x,0.0,1.0)
 fragment float4 forceAreaOverlayFragment(
     OverlayVertexOut in [[stage_in]],
     texture2d<float, access::sample> particlesTexture [[texture(0)]],
@@ -295,50 +416,33 @@ fragment float4 forceAreaOverlayFragment(
     constant float2    &viewportSize [[buffer(2)]],
     constant uint      &overlayEnabled [[buffer(3)]]
 ) {
+    float2 resolution = float2(viewportSize.x, viewportSize.y);
+    float wiggle = 1.0;
+    float4 rect = float4(0.5,0.5 ,0.025,0.025);
+//    in.uv  = glassUV(in.uv,  resolution, rect);
     in.uv.y = 1.0 - in.uv.y;
+    float2 uv = in.uv;
     const float2 pixelPos = in.uv * viewportSize;
     constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
 
-    // Bloom: смешиваем исходную и размытую текстуру частиц.
-    const float4 particlesSource = particlesTexture.sample(linearSampler, in.uv);
-    const float4 particlesBlurred = blurredParticlesTexture.sample(linearSampler, in.uv);
-     float4 particlesBase = saturate((particlesSource * 0.75) + (particlesBlurred * 1.35));
-    float3 pltt = palett(particlesBase.r*12.0).rgb*particlesBase.r;
-    particlesBase.rgb = mix(particlesBase.rgb,pltt,1.0 - particlesBase.rgb);
-    if (overlayEnabled == 0u) {
-        return particlesBase;
-    }
-
+    
     float4 overlay = float4(0.0);
-
-    // ── Зоны ветра: голубое/бирюзовое свечение ────────────────────────────────
-    for (int i = 0; i < 4; i++) {
-        if (windZones[i].strength <= 0.0) continue;
-
-        const float radius = windZones[i].radius;
-        const float forceArea = distance(pixelPos, windZones[i].center);
-
-        float fill = (1.0 - smoothstep(0.0, radius, forceArea)) * 0.07;
-
-        float ring = smoothstep(radius * 0.91, radius * 0.96, forceArea)
-                   * (1.0 - smoothstep(radius * 0.96, radius * 1.0, forceArea));
-        ring *= 0.6;
-
-        float dot = 1.0 - smoothstep(0.0, radius * 0.03, forceArea);
-
-        float4 color = float4(0.15, 0.72, 1.0, 1.0) * (fill + ring + dot);
-//        overlay = saturate(overlay + color);
-    }
-
+    float chromaValue = 0.0;
     // ── Гравитационные колодцы: оранжевое/янтарное свечение ──────────────────
     for (int i = 0; i < 4; i++) {
         const float mass = gravityWell[i].z;
         if (mass <= 0.0) continue;
 
-        const float2 wellPos = float2(gravityWell[i].x, gravityWell[i].y);
+         float2 wellPos = float2(gravityWell[i].x, gravityWell[i].y);
         const float radius =  (mass) + 12.0 ;
-        const float forceArea = distance(pixelPos, wellPos);
-
+         float forceArea = distance(pixelPos, wellPos);
+        float2 p = wellPos/viewportSize;
+        p = uv - p;
+        p.x *= viewportSize.x / viewportSize.y;
+        p *= 2.;
+        float d = 1.0 - length(p);
+        chromaValue += smoothstep(0.0, 1., d/12.)*12.;
+        
         const float2 localUV = (pixelPos - wellPos) / radius;
         float fill = diffuseSphereLayer(localUV);
 
@@ -346,5 +450,19 @@ fragment float4 forceAreaOverlayFragment(
         overlay = saturate(overlay + color);
     }
 
-    return saturate(particlesBase + (overlay * 1.15));
+    // Bloom: смешиваем исходную и размытую текстуру частиц.
+//    (float2 uv,texture2d<float>  image,float value,float2 pos) {
+    const float4 particlesSource = float4(chromatic_aberration( in.uv,particlesTexture,chromaValue,float2(0.5)),1.0);// particlesTexture.sample(linearSampler, in.uv);
+    const float4 particlesBlurred = float4(chromatic_aberration( in.uv,blurredParticlesTexture,chromaValue*2.,float2(0.5)),1.0);//blurredParticlesTexture.sample(linearSampler, in.uv);
+     float4 particlesBase = saturate((particlesSource * 0.5) + (particlesBlurred * 1.5));
+    float3 pltt2 = palett(particlesBase.r*8.0*chromaValue).rgb*particlesBase.r*chromaValue;
+    float3 pltt = palett(particlesBase.r*8.0).rgb*particlesBase.r;
+//    particlesBase.rgb = pltt;
+    particlesBase.rgb = mix(particlesBase.rgb,pltt,1.0 - particlesBase.rgb);
+        particlesBase.rgb += pltt2/2.;
+    if (overlayEnabled == 0u) {
+        return particlesBase;
+    }
+
+    return saturate(particlesBase );
 }
