@@ -245,6 +245,7 @@ kernel void particleRendererShader(
     float4x4 outParticle;
 
     const float spawnSpeedMultipler = 112.0;
+    const float twoPi = 6.28318530718;
     const float typeTweak = float((id % 3) + 1);
     const float4 outColor = float4(particleColor.rgb, 1.0);
 
@@ -255,10 +256,38 @@ kernel void particleRendererShader(
         if (pixelPos.x > 0 && pixelPos.y > 0 && pixelPos.x < imageWidth && pixelPos.y < imageHeight) {
             outTexture.write(outColor, pixelPos);
         } else if (respawnOutOfBoundsParticles) {
-            p.z = spawnSpeedMultipler * fast::sin(p.x + p.y);
-            p.w = spawnSpeedMultipler * fast::cos(p.x + p.y);
-            p.x = imageWidth * 0.5;
-            p.y = imageHeight * 0.5;
+            const float seed = float(inParticle.columns[0].x + i);
+            const float chooser = hash21(float2(seed * 0.31, seed * 0.83));
+            int baseWellIndex = int(floor(chooser * 4.0));
+            int spawnWellIndex = -1;
+
+            for (int offset = 0; offset < 4; offset++) {
+                int candidate = (baseWellIndex + offset) % 4;
+                if (inGravityWell[candidate].z > 0.0) {
+                    spawnWellIndex = candidate;
+                    break;
+                }
+            }
+
+            if (spawnWellIndex >= 0) {
+                const float2 wellPos = inGravityWell[spawnWellIndex].xy;
+                const float wellMass = inGravityWell[spawnWellIndex].z;
+                const float wellSpin = inGravityWell[spawnWellIndex].w;
+
+                const float angle = twoPi * hash21(float2(seed * 1.17, seed * 2.31));
+                const float2 dir = float2(fast::cos(angle), fast::sin(angle));
+                const float spawnRadius = 1.0 + 10.0 * hash21(float2(seed * 0.57, seed * 3.11));
+                const float outwardSpeed =  0.0001 * hash21(float2(seed * 4.17, seed * 1.13)) + (wellMass * 0.03);
+                const float2 tangent = float2(-dir.y, dir.x) * (wellSpin * 0.035);
+
+                p.xy = wellPos + dir * spawnRadius;
+                p.zw = dir * outwardSpeed + tangent;
+            } else {
+                p.z = spawnSpeedMultipler * fast::sin(p.x + p.y);
+                p.w = spawnSpeedMultipler * fast::cos(p.x + p.y);
+                p.x = imageWidth * 0.5;
+                p.y = imageHeight * 0.5;
+            }
         }
 
         const float2 pos = p.xy;
@@ -279,11 +308,11 @@ kernel void particleRendererShader(
 
         const float2 windAccel = windAcceleration(pos, windZones);
         const float seed = float(id * 4u + i);
-        const float2 noiseDrift = subtleNoiseDrift(pos, seed)*3.;
+        const float2 noiseDrift = subtleNoiseDrift(pos, seed)*0.1;
         float2 nextPos = wrapPosition(pos + vel, imageWidth, imageHeight);
         const float2 nextVel = (vel * dragFactor) + gravityAndSpinAccel + windAccel + noiseDrift;
 
-        outParticle[i] = float4(nextPos, nextVel);
+        outParticle[i] = float4(nextPos, nextVel/1.0);
     }
 
     outParticles[id] = outParticle;
@@ -403,7 +432,7 @@ float diffuseSphereLayer(float2 uv)
     if(dist > 0.2) return 0.0;
     float z = sqrt(0.04 - dist * dist);
     float3 normal = normalize(float3(uv, z));
-    float3 light = float3(0.0, 0.0, 1.0);
+    float3 light = float3(0.0, 0.4, 1.0);
     return max(0.0, dot(normal, light));
 }
 #define     clp(x) clamp(x,0.0,1.0)
@@ -443,17 +472,19 @@ fragment float4 forceAreaOverlayFragment(
         float d = 1.0 - length(p);
         chromaValue += smoothstep(0.0, 1., d/12.)*12.;
         
-        const float2 localUV = (pixelPos - wellPos) / radius;
-        float fill = diffuseSphereLayer(localUV);
+         float2 localUV = (pixelPos - wellPos) / radius;
+        localUV.y += 0.4;
+        float fill = diffuseSphereLayer(localUV/3.);
 
         float4 color =  float4(palett(fill * 2 )*fill + fill, 1.0);
-        overlay = saturate(overlay + color);
+        overlay += fill;
     }
 
     // Bloom: смешиваем исходную и размытую текстуру частиц.
 //    (float2 uv,texture2d<float>  image,float value,float2 pos) {
     const float4 particlesSource = float4(chromatic_aberration( in.uv,particlesTexture,chromaValue,float2(0.5)),1.0);// particlesTexture.sample(linearSampler, in.uv);
     const float4 particlesBlurred = float4(chromatic_aberration( in.uv,blurredParticlesTexture,chromaValue*2.,float2(0.5)),1.0);//blurredParticlesTexture.sample(linearSampler, in.uv);
+    overlay *= particlesBlurred.r;
      float4 particlesBase = saturate((particlesSource * 0.5) + (particlesBlurred * 1.5));
     float3 pltt2 = palett(particlesBase.r*8.0*chromaValue).rgb*particlesBase.r*chromaValue;
     float3 pltt = palett(particlesBase.r*8.0).rgb*particlesBase.r;
@@ -463,6 +494,8 @@ fragment float4 forceAreaOverlayFragment(
     if (overlayEnabled == 0u) {
         return particlesBase;
     }
-
-    return saturate(particlesBase );
+    particlesBase -= chromaValue*3.;
+    particlesBase = mix(particlesBase, overlay, overlay);
+//    return saturate(overlay);
+    return saturate(particlesBase);
 }

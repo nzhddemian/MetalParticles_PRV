@@ -57,7 +57,7 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
         
         mtlView.particleLabDelegate = self
         mtlView.dragFactor = 0.95
-        mtlView.respawnOutOfBoundsParticles = false
+        mtlView.respawnOutOfBoundsParticles = true
         mtlView.clearOnStep = true
         mtlView.resetParticles(false)
         mtlView.isMultipleTouchEnabled = true
