@@ -417,6 +417,8 @@ fragment float4 forceAreaOverlayFragment(
 
         overlay += float4(stoneSample.rgb * stoneSample.a, stoneSample.a);
     }
-
-    return saturate(particlesBase + (overlay * 1.15));
+    
+    overlay = mix(overlay,overlay + particlesBlurred,particlesBlurred.a)*overlay.a;
+     particlesBase = mix(particlesBase , overlay.rrra,overlay.a);
+    return particlesBase;
 }
