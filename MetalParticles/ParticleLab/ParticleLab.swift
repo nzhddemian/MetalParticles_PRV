@@ -110,8 +110,8 @@ final class ParticleLab: MTKView {
             Float(drand48() - 0.5) * 0.005
         }
         
-        let imageWidthDouble = Double(imageWidth)
-        let imageHeightDouble = Double(imageHeight)
+        let imageWidthDouble = Double(imageWidth/2)
+        let imageHeightDouble = Double(imageHeight/2)
         
         for index in particlesParticleBufferPtr.startIndex..<particlesParticleBufferPtr.endIndex {
             var positionAX = Float(drand48() * imageWidthDouble)

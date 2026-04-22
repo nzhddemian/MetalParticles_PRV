@@ -355,9 +355,9 @@ final class ViewController: UIHostingController<MetalSwiftUIView> {
             return
         }
 
-        let portrait2K = CGSize(width: 1080, height: 1920)
-        scene.sizeRestrictions?.minimumSize = portrait2K
-        scene.sizeRestrictions?.maximumSize = portrait2K
+        let portraitLarge = CGSize(width: 1440, height: 2560)
+        scene.sizeRestrictions?.minimumSize = portraitLarge
+        scene.sizeRestrictions?.maximumSize = portraitLarge
 #endif
     }
 }

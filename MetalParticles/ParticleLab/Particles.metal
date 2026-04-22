@@ -323,7 +323,7 @@ kernel void particleRendererShader(
 
         const float2 windAccel = windAcceleration(pos, windZones);
         const float seed = float(id * 4u + i);
-        const float2 noiseDrift = subtleNoiseDrift(pos, seed)*0.1;
+        const float2 noiseDrift = subtleNoiseDrift(pos, seed)*0.01;
         const float2 flowAccel = channelFlowAcceleration(pos, imageWidth, imageHeight, seed)*0.3;
         float2 nextPos = wrapPosition(pos + vel, imageWidth, imageHeight);
         const float2 nextVel = (vel * dragFactor) + gravityAndSpinAccel + windAccel + noiseDrift + flowAccel;
@@ -378,7 +378,7 @@ float diffuseSphereLayer(float2 uv)
     float3 light = float3(0.0, 0.0, 1.0);
     return max(0.0, dot(normal, light));
 }
-
+#define clp(x) clamp(x,0.0,1.0)
 fragment float4 forceAreaOverlayFragment(
     OverlayVertexOut in [[stage_in]],
     texture2d<float, access::sample> particlesTexture [[texture(0)]],
@@ -418,13 +418,13 @@ fragment float4 forceAreaOverlayFragment(
         const float texHeight = float(stoneTexture.get_height());
         const float aspect = texHeight > 0.0 ? texWidth / texHeight : 1.0;
         const float radius = mass + 12.0;
-        const float2 stoneUV = stoneUVForWell(pixelPos, wellPos, radius, aspect);
+        const float2 stoneUV = stoneUVForWell(pixelPos, wellPos, radius, 1.0);
         const float4 stoneSample = stoneTexture.sample(linearSampler, stoneUV);
 
-        overlay += float4(stoneSample.rgb * stoneSample.a, stoneSample.a);
+        overlay = mix(overlay, stoneSample, stoneSample);
     }
     
-    overlay = mix(overlay,overlay + particlesBlurred,particlesBlurred.a)*overlay.a;
-     particlesBase = mix(particlesBase , overlay.rrra,overlay.a);
+//    overlay = mix(overlay,overlay + particlesBlurred,particlesBlurred.a)*overlay.a;
+     particlesBase = mix(clp(particlesBase -overlay.a), overlay.rrra,overlay.rrra )+overlay.rrra;
     return particlesBase;
 }
