@@ -14,12 +14,7 @@ protocol ParticleLabDelegate: AnyObject {
     func particleLabMetalUnavailable()
 }
 
-enum GravityWell {
-    case one
-    case two
-    case three
-    case four
-}
+let gravityWellCount = 12
 
 // Каждый экземпляр Particle содержит данные для 4 суб-частиц (A, B, C, D),
 // упакованные в матрицу float4x4. Это позволяет одному GPU-треду
@@ -74,6 +69,13 @@ struct WindZone {
     var _pad1: Float32    // выравнивание
 }
 
+struct GravityWellState {
+    var x: Float32 = 0
+    var y: Float32 = 0
+    var mass: Float32 = 0
+    var spin: Float32 = 0
+}
+
 
 
 
@@ -85,84 +87,18 @@ extension ParticleLab{
         mass: Float,
         spin: Float
     ) {
-        switch gravityWellIndex {
-        case 1:
-            setGravityWellProperties(
-                gravityWell: .two,
-                normalisedPositionX: normalisedPositionX,
-                normalisedPositionY: normalisedPositionY,
-                mass: mass,
-                spin: spin
-            )
-            
-        case 2:
-            setGravityWellProperties(
-                gravityWell: .three,
-                normalisedPositionX: normalisedPositionX,
-                normalisedPositionY: normalisedPositionY,
-                mass: mass,
-                spin: spin
-            )
-            
-        case 3:
-            setGravityWellProperties(
-                gravityWell: .four,
-                normalisedPositionX: normalisedPositionX,
-                normalisedPositionY: normalisedPositionY,
-                mass: mass,
-                spin: spin
-            )
-            
-        default:
-            setGravityWellProperties(
-                gravityWell: .one,
-                normalisedPositionX: normalisedPositionX,
-                normalisedPositionY: normalisedPositionY,
-                mass: mass,
-                spin: spin
-            )
-        }
-    }
-    func resetGravityWells() {
-        setGravityWellProperties(gravityWell: .one, normalisedPositionX: 0.85, normalisedPositionY: 0.95, mass: 0, spin: 0)
-        setGravityWellProperties(gravityWell: .two, normalisedPositionX: 0.95, normalisedPositionY: 0.95, mass: 0, spin: 0)
-        setGravityWellProperties(gravityWell: .three, normalisedPositionX: 0.95, normalisedPositionY: 0.95, mass: 0, spin: 0)
-        setGravityWellProperties(gravityWell: .four, normalisedPositionX: 0.95, normalisedPositionY:0.95, mass: 0, spin: 0)
-    }
-    final func setGravityWellProperties(
-        gravityWell: GravityWell,
-        normalisedPositionX: Float,
-        normalisedPositionY: Float,
-        mass: Float,
-        spin: Float
-    ) {
+        guard gravityWellIndex >= 0 && gravityWellIndex < gravityWellCount else { return }
+
         let imageWidthFloat = Float(imageWidth)
         let imageHeightFloat = Float(imageHeight)
-        
-        switch gravityWell {
-        case .one:
-            gravityWellParticle.A.x = imageWidthFloat * normalisedPositionX
-            gravityWellParticle.A.y = imageHeightFloat * normalisedPositionY
-            gravityWellParticle.A.z = mass
-            gravityWellParticle.A.w = spin
-            
-        case .two:
-            gravityWellParticle.B.x = imageWidthFloat * normalisedPositionX
-            gravityWellParticle.B.y = imageHeightFloat * normalisedPositionY
-            gravityWellParticle.B.z = mass
-            gravityWellParticle.B.w = spin
-            
-        case .three:
-            gravityWellParticle.C.x = imageWidthFloat * normalisedPositionX
-            gravityWellParticle.C.y = imageHeightFloat * normalisedPositionY
-            gravityWellParticle.C.z = mass
-            gravityWellParticle.C.w = spin
-            
-        case .four:
-            gravityWellParticle.D.x = imageWidthFloat * normalisedPositionX
-            gravityWellParticle.D.y = imageHeightFloat * normalisedPositionY
-            gravityWellParticle.D.z = mass
-            gravityWellParticle.D.w = spin
-        }
+        gravityWells[gravityWellIndex] = GravityWellState(
+            x: imageWidthFloat * normalisedPositionX,
+            y: imageHeightFloat * normalisedPositionY,
+            mass: mass,
+            spin: spin
+        )
+    }
+    func resetGravityWells() {
+        gravityWells = Array(repeating: GravityWellState(), count: gravityWellCount)
     }
 }

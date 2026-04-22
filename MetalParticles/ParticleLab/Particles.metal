@@ -74,6 +74,14 @@ struct WindZone {
     float2 force;     // вектор направления ветра (пиксели/кадр² на единицу)
     float2 _pad;      // выравнивание структуры до 32 байт
 };
+
+struct GravityWell {
+    float2 center;
+    float mass;
+    float spin;
+};
+
+constant int gravityWellCount = 12;
 float3 palett(float v ) {
     return float3(0.26) + tan(1.09)*sin(1.09)*0.26 * cos(3.18318 * (v + float3(0.0,0.333,0.567)));
 }
@@ -242,10 +250,8 @@ kernel void particleRendererShader(
     const device float4x4 *inParticles  [[ buffer(0) ]],
     device       float4x4 *outParticles [[ buffer(1) ]],
 
-    // 4 гравитационных колодца, упакованные в одну матрицу float4x4:
-    //   [0].xy = позиция колодца 0,  [0].z = масса,  [0].w = спин
-    //   [1].xy = позиция колодца 1,  [1].z = масса,  [1].w = спин  ...и т.д.
-    constant float4x4 &inGravityWell [[ buffer(2) ]],
+    // Массив гравитационных колодцев: center = позиция, mass = масса, spin = спин.
+    constant GravityWell *inGravityWell [[ buffer(2) ]],
 
     // RGBA-цвет частиц. Цвет сдвигается циклически для трёх классов частиц:
     //   id%3==0: RGB,  id%3==1: BRG,  id%3==2: GBR
@@ -293,9 +299,9 @@ kernel void particleRendererShader(
         const float2 vel = p.zw;
 
         float2 gravityAndSpinAccel = float2(0.0);
-        for (int well = 0; well < 4; well++) {
-            const float2 wellPos = inGravityWell[well].xy;
-            const float wellMass = inGravityWell[well].z;
+        for (int well = 0; well < gravityWellCount; well++) {
+            const float2 wellPos = inGravityWell[well].center;
+            const float wellMass = inGravityWell[well].mass;
             const int stoneTextureIndex = (well * 3 + int(wellMass)) % 14;
             const texture2d<float, access::sample> stoneTexture = stoneTextures[stoneTextureIndex];
             const float texWidth = float(stoneTexture.get_width());
@@ -308,7 +314,7 @@ kernel void particleRendererShader(
             const float distSq = fast::max(dot(delta, delta), DIST_SQ_MIN);
             const float invDistSq = 1.0 / distSq;
             const float mass = wellMass * typeTweak * gravityAlpha;
-            const float spin = inGravityWell[well].w * 2.1 * gravityAlpha;
+            const float spin = inGravityWell[well].spin * 2.1 * gravityAlpha;
 
             // Радиальная гравитация + тангенциальный спин. 
             gravityAndSpinAccel +=  (mass * invDistSq);
@@ -318,7 +324,7 @@ kernel void particleRendererShader(
         const float2 windAccel = windAcceleration(pos, windZones);
         const float seed = float(id * 4u + i);
         const float2 noiseDrift = subtleNoiseDrift(pos, seed)*0.1;
-        const float2 flowAccel = channelFlowAcceleration(pos, imageWidth, imageHeight, seed)*1.1;
+        const float2 flowAccel = channelFlowAcceleration(pos, imageWidth, imageHeight, seed)*0.3;
         float2 nextPos = wrapPosition(pos + vel, imageWidth, imageHeight);
         const float2 nextVel = (vel * dragFactor) + gravityAndSpinAccel + windAccel + noiseDrift + flowAccel;
 
@@ -379,7 +385,7 @@ fragment float4 forceAreaOverlayFragment(
     texture2d<float, access::sample> blurredParticlesTexture [[texture(1)]],
     array<texture2d<float, access::sample>, 14> stoneTextures [[texture(2)]],
     constant WindZone*  windZones    [[buffer(0)]],
-    constant float4x4  &gravityWell  [[buffer(1)]],
+    constant GravityWell *gravityWell [[buffer(1)]],
     constant float2    &viewportSize [[buffer(2)]],
     constant uint      &overlayEnabled [[buffer(3)]]
 ) {
@@ -401,11 +407,11 @@ fragment float4 forceAreaOverlayFragment(
 
 
     // ── Гравитационные колодцы: оранжевое/янтарное свечение ──────────────────
-    for (int i = 0; i < 4; i++) {
-        const float mass = gravityWell[i].z;
+    for (int i = 0; i < gravityWellCount; i++) {
+        const float mass = gravityWell[i].mass;
         if (mass <= 0.0) continue;
 
-        const float2 wellPos = float2(gravityWell[i].x, gravityWell[i].y);
+        const float2 wellPos = gravityWell[i].center;
         const int stoneTextureIndex = (i * 3 + int(mass)) % 14;
         const texture2d<float, access::sample> stoneTexture = stoneTextures[stoneTextureIndex];
         const float texWidth = float(stoneTexture.get_width());

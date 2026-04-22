@@ -27,12 +27,7 @@ final class ParticleLab: MTKView {
     private var particlesParticlePtr: UnsafeMutablePointer<Particle>!
     private var particlesParticleBufferPtr: UnsafeMutableBufferPointer<Particle>!
     
-    var gravityWellParticle = Particle(
-        A: Vector4(x: 1, y: 0, z: 0, w: 0),
-        B: Vector4(x: 1, y: 0, z: 0, w: 0),
-        C: Vector4(x: 1, y: 0, z: 0, w: 0),
-        D: Vector4(x: 1, y: 0, z: 0, w: 0)
-    )
+    var gravityWells: [GravityWellState] = Array(repeating: GravityWellState(), count: gravityWellCount)
     
     private var frameStartTime: CFAbsoluteTime!
     private var frameNumber = 0
@@ -249,12 +244,15 @@ final class ParticleLab: MTKView {
             frameNumber = 0
         }
 
-        var localGravityWell = gravityWellParticle
-        let gravityWellBuffer = device.makeBuffer(
-            bytes: &localGravityWell,
-            length: MemoryLayout<Particle>.stride,
-            options: .cpuCacheModeWriteCombined
-        )
+        let localGravityWells = gravityWells
+        let gravityWellBuffer: MTLBuffer? = localGravityWells.withUnsafeBufferPointer { bufferPointer -> MTLBuffer? in
+            guard let baseAddress = bufferPointer.baseAddress else { return nil }
+            return device.makeBuffer(
+                bytes: baseAddress,
+                length: MemoryLayout<GravityWellState>.stride * bufferPointer.count,
+                options: .cpuCacheModeWriteCombined
+            )
+        }
 
         var localColor = particleColor
         let colorBuffer = device.makeBuffer(
@@ -277,12 +275,15 @@ final class ParticleLab: MTKView {
             options: .cpuCacheModeWriteCombined
         )
 
-        var localWindZones = windZones
-        let windZonesBuffer = device.makeBuffer(
-            bytes: &localWindZones,
-            length: MemoryLayout<WindZone>.stride * 4,
-            options: .cpuCacheModeWriteCombined
-        )
+        let localWindZones = windZones
+        let windZonesBuffer: MTLBuffer? = localWindZones.withUnsafeBufferPointer { bufferPointer -> MTLBuffer? in
+            guard let baseAddress = bufferPointer.baseAddress else { return nil }
+            return device.makeBuffer(
+                bytes: baseAddress,
+                length: MemoryLayout<WindZone>.stride * bufferPointer.count,
+                options: .cpuCacheModeWriteCombined
+            )
+        }
 
         guard
             let gravityWellBuffer,

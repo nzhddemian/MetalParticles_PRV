@@ -72,9 +72,8 @@ final class MetalUIModel: NSObject, ObservableObject, ParticleLabDelegate, Input
             strength: 1.0
         )
 
-        // Keep one gravity well (index 0) reserved for touch.
-        // Use indices 1...3 for static random spots.
-        staticSpots = (1...3).map { i in
+        // Populate the scene with 12 stones; touch can still temporarily steer index 0.
+        staticSpots = (0..<gravityWellCount).map { i in
             StaticSpot(
                 index: i,
                 x: Float.random(in: 0.15...0.85),

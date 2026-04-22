@@ -1,0 +1,69 @@
+{
+  "" : {
+    "diagnostics" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalParticlesPRV-primary.dia",
+    "emit-module-dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalParticlesPRV-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalParticlesPRV-primary-emit-module.dia",
+    "pch" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalParticlesPRV-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalParticlesPRV-primary.swiftdeps"
+  },
+  "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/dev/Metal/MetalParticles_PRV/MetalParticles/AppDelegate.swift" : {
+    "const-values" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/AppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/AppDelegate.d",
+    "diagnostics" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/AppDelegate.dia",
+    "index-unit-output-path" : "/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/AppDelegate.o",
+    "swift-dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/AppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/AppDelegate~partial.swiftmodule"
+  },
+  "/Users/dev/Metal/MetalParticles_PRV/MetalParticles/ParticleLab/MetalDevice.swift" : {
+    "const-values" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalDevice.swiftconstvalues",
+    "dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalDevice.d",
+    "diagnostics" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalDevice.dia",
+    "index-unit-output-path" : "/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalDevice.o",
+    "llvm-bc" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalDevice.bc",
+    "object" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalDevice.o",
+    "swift-dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalDevice.swiftdeps",
+    "swiftmodule" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/MetalDevice~partial.swiftmodule"
+  },
+  "/Users/dev/Metal/MetalParticles_PRV/MetalParticles/ParticleLab/Particle.swift" : {
+    "const-values" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/Particle.swiftconstvalues",
+    "dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/Particle.d",
+    "diagnostics" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/Particle.dia",
+    "index-unit-output-path" : "/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/Particle.o",
+    "llvm-bc" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/Particle.bc",
+    "object" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/Particle.o",
+    "swift-dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/Particle.swiftdeps",
+    "swiftmodule" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/Particle~partial.swiftmodule"
+  },
+  "/Users/dev/Metal/MetalParticles_PRV/MetalParticles/ParticleLab/ParticleLab.swift" : {
+    "const-values" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ParticleLab.swiftconstvalues",
+    "dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ParticleLab.d",
+    "diagnostics" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ParticleLab.dia",
+    "index-unit-output-path" : "/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ParticleLab.o",
+    "llvm-bc" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ParticleLab.bc",
+    "object" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ParticleLab.o",
+    "swift-dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ParticleLab.swiftdeps",
+    "swiftmodule" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ParticleLab~partial.swiftmodule"
+  },
+  "/Users/dev/Metal/MetalParticles_PRV/MetalParticles/ViewController.swift" : {
+    "const-values" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ViewController.swiftconstvalues",
+    "dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ViewController.d",
+    "diagnostics" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ViewController.dia",
+    "index-unit-output-path" : "/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ViewController.o",
+    "llvm-bc" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ViewController.bc",
+    "object" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ViewController.o",
+    "swift-dependencies" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ViewController.swiftdeps",
+    "swiftmodule" : "/Users/dev/Metal/MetalParticles_PRV/.build/DerivedData/Build/Intermediates.noindex/MetalParticlesPRV.build/Debug-iphoneos/MetalParticlesPRV.build/Objects-normal/arm64/ViewController~partial.swiftmodule"
+  }
+}
