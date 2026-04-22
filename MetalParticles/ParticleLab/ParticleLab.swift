@@ -15,6 +15,7 @@ final class ParticleLab: MTKView {
     private var threadgroupsPerGrid: MTLSize!
     
     private var forceAreaRenderPipelineState: MTLRenderPipelineState!
+    private var stoneTextures: [MTLTexture] = []
     
     var showForceAreas: Bool = true
     
@@ -55,6 +56,7 @@ final class ParticleLab: MTKView {
         WindZone(x: 0, y: 0, radius: 1, strength: 0, forceX: 0, forceY: 0, _pad0: 0, _pad1: 0),
         WindZone(x: 0, y: 0, radius: 1, strength: 0, forceX: 0, forceY: 0, _pad0: 0, _pad1: 0),
     ]
+    private let stoneTextureNames: [String] = (0...13).map { "kamen_\($0)" }
     
     init(width: UInt, height: UInt, numParticles: ParticleCount, hiDPI: Bool) {
         particleCount = numParticles.rawValue
@@ -221,6 +223,7 @@ final class ParticleLab: MTKView {
         textureDescriptor.storageMode = .shared
         particleRenderTexture = device.makeTexture(descriptor: textureDescriptor)
         blurredParticleTexture = device.makeTexture(descriptor: textureDescriptor)
+        stoneTextures = loadStoneTextures(device: device)
     }
     
     override func draw(_ dirtyRect: CGRect) {
@@ -315,6 +318,9 @@ final class ParticleLab: MTKView {
             computeEncoder.setBuffer(respawnBuffer, offset: 0, index: 7)
             computeEncoder.setBuffer(windZonesBuffer, offset: 0, index: 8)
             computeEncoder.setTexture(particleRenderTexture, index: 0)
+            for (textureIndex, texture) in stoneTextures.enumerated() {
+                computeEncoder.setTexture(texture, index: 1 + textureIndex)
+            }
             computeEncoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
             computeEncoder.endEncoding()
         }
@@ -337,6 +343,9 @@ final class ParticleLab: MTKView {
             renderEncoder.setRenderPipelineState(forceAreaRenderPipelineState)
             renderEncoder.setFragmentTexture(particleRenderTexture, index: 0)
             renderEncoder.setFragmentTexture(blurredParticleTexture, index: 1)
+            for (textureIndex, texture) in stoneTextures.enumerated() {
+                renderEncoder.setFragmentTexture(texture, index: 2 + textureIndex)
+            }
             renderEncoder.setFragmentBuffer(windZonesBuffer, offset: 0, index: 0)
             renderEncoder.setFragmentBuffer(gravityWellBuffer, offset: 0, index: 1)
             renderEncoder.setFragmentBytes(&viewportSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 2)
@@ -377,4 +386,46 @@ final class ParticleLab: MTKView {
             windZones[i] = WindZone(x: 0, y: 0, radius: 1, strength: 0, forceX: 0, forceY: 0, _pad0: 0, _pad1: 0)
         }
     }
+
+    private func loadStoneTextures(device: MTLDevice) -> [MTLTexture] {
+        let loader = MTKTextureLoader(device: device)
+        let options: [MTKTextureLoader.Option: Any] = [
+            .SRGB: false
+        ]
+
+        let fallback = makeFallbackStoneTexture(device: device)
+        return stoneTextureNames.map { name in
+            if let texture = try? loader.newTexture(name: name, scaleFactor: 1.0, bundle: .main, options: options) {
+                return texture
+            }
+            return fallback
+        }
+    }
+
+    private func makeFallbackStoneTexture(device: MTLDevice) -> MTLTexture {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: 2,
+            height: 2,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead]
+        descriptor.storageMode = .shared
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            fatalError("Failed to create fallback stone texture")
+        }
+
+        let pixels: [UInt8] = [
+            90, 100, 110, 255,   130, 140, 150, 255,
+            130, 140, 150, 255,  90, 100, 110, 255
+        ]
+        texture.replace(
+            region: MTLRegionMake2D(0, 0, 2, 2),
+            mipmapLevel: 0,
+            withBytes: pixels,
+            bytesPerRow: 2 * 4
+        )
+        return texture
+    }
+
 }

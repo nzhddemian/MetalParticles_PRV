@@ -153,12 +153,88 @@ inline float2 subtleNoiseDrift(float2 pos, float seed) {
     return wobble + noise;
 }
 
+inline float noise2D(float2 p) {
+    const float2 i = floor(p);
+    const float2 f = fract(p);
+
+    const float a = hash21(i);
+    const float b = hash21(i + float2(1.0, 0.0));
+    const float c = hash21(i + float2(0.0, 1.0));
+    const float d = hash21(i + float2(1.0, 1.0));
+
+    const float2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+inline float fbm(float2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float2 domain = p;
+
+    for (int octave = 0; octave < 4; octave++) {
+        value += amplitude * noise2D(domain);
+        domain = domain * 2.03 + float2(19.1, 7.7);
+        amplitude *= 0.5;
+    }
+
+    return value;
+}
+
+inline float2 channelFlowAcceleration(float2 pos, float imageWidth, float imageHeight, float seed) {
+    const float2 uv = pos / float2(imageWidth, imageHeight);
+    const float2 domain = uv * 3.2 + float2(1.7, 3.9);
+
+    const float streamShape = fbm(domain * 2.0);
+    const float streamTwist = fbm(domain * 3.7 + seed * 0.03);
+
+    // Narrow channel mask: particles outside channels get little/no push.
+    const float channels = smoothstep(0.47, 0.7, streamShape) * (1.0 - smoothstep(0.7, 0.9, streamShape));
+    if (channels <= 0.0001) {
+        return float2(0.0);
+    }
+
+    const float eps = 0.01;
+    const float gradX = fbm(domain + float2(eps, 0.0)) - fbm(domain - float2(eps, 0.0));
+    const float gradY = fbm(domain + float2(0.0, eps)) - fbm(domain - float2(0.0, eps));
+    float2 alongIsoline = float2(-gradY, gradX);
+
+    const float dirLen = length(alongIsoline);
+    if (dirLen < 0.0001) {
+        alongIsoline = float2(1.0, 0.0);
+    } else {
+        alongIsoline /= dirLen;
+    }
+
+    const float angle = streamTwist * 6.28318530718 + seed * 0.11;
+    const float2 twistDir = float2(fast::cos(angle), fast::sin(angle));
+    const float2 flowDir = normalize(mix(alongIsoline, twistDir, 0.28));
+
+    const float strength = (0.4 + channels * 2.2);
+    return flowDir * strength;
+}
+
+constexpr sampler stoneTextureSampler(filter::linear, address::clamp_to_zero);
+
+inline float2 stoneUVForWell(float2 point, float2 wellPos, float radius, float textureAspect) {
+    const float stoneRadius = max(radius * 0.42, 1.0);
+    float2 uv = (point - wellPos) / stoneRadius;
+
+    if (textureAspect > 1.0) {
+        uv.x /= textureAspect;
+    } else {
+        uv.y *= textureAspect;
+    }
+
+    return uv * 0.5 + 0.5;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // KERNEL: particleRendererShader
 // ═══════════════════════════════════════════════════════════════════════════════
 kernel void particleRendererShader(
     // Выходная текстура — пишем пиксели частиц напрямую через outTexture.write()
     texture2d<float, access::write> outTexture [[texture(0)]],
+    array<texture2d<float, access::sample>, 14> stoneTextures [[texture(1)]],
 
     // inParticles/outParticles указывают на один и тот же буфер (zero-copy shared memory).
     // Разделение на «вход» и «выход» гарантирует что тред читает старые данные,
@@ -218,11 +294,21 @@ kernel void particleRendererShader(
 
         float2 gravityAndSpinAccel = float2(0.0);
         for (int well = 0; well < 4; well++) {
-            const float2 delta = inGravityWell[well].xy - pos;
+            const float2 wellPos = inGravityWell[well].xy;
+            const float wellMass = inGravityWell[well].z;
+            const int stoneTextureIndex = (well * 3 + int(wellMass)) % 14;
+            const texture2d<float, access::sample> stoneTexture = stoneTextures[stoneTextureIndex];
+            const float texWidth = float(stoneTexture.get_width());
+            const float texHeight = float(stoneTexture.get_height());
+            const float textureAspect = texHeight > 0.0 ? texWidth / texHeight : 1.0;
+            const float radius = wellMass + 12.0;
+            const float2 stoneUV = stoneUVForWell(pos, wellPos, radius, textureAspect);
+            const float gravityAlpha = stoneTexture.sample(stoneTextureSampler, stoneUV).a;
+            const float2 delta = wellPos - pos;
             const float distSq = fast::max(dot(delta, delta), DIST_SQ_MIN);
             const float invDistSq = 1.0 / distSq;
-            const float mass = inGravityWell[well].z * typeTweak;
-            const float spin = inGravityWell[well].w * 2.1;
+            const float mass = wellMass * typeTweak * gravityAlpha;
+            const float spin = inGravityWell[well].w * 2.1 * gravityAlpha;
 
             // Радиальная гравитация + тангенциальный спин. 
             gravityAndSpinAccel +=  (mass * invDistSq);
@@ -231,9 +317,10 @@ kernel void particleRendererShader(
 
         const float2 windAccel = windAcceleration(pos, windZones);
         const float seed = float(id * 4u + i);
-        const float2 noiseDrift = subtleNoiseDrift(pos, seed);
+        const float2 noiseDrift = subtleNoiseDrift(pos, seed)*0.1;
+        const float2 flowAccel = channelFlowAcceleration(pos, imageWidth, imageHeight, seed)*1.1;
         float2 nextPos = wrapPosition(pos + vel, imageWidth, imageHeight);
-        const float2 nextVel = (vel * dragFactor) + gravityAndSpinAccel + windAccel + noiseDrift;
+        const float2 nextVel = (vel * dragFactor) + gravityAndSpinAccel + windAccel + noiseDrift + flowAccel;
 
         outParticle[i] = float4(nextPos, nextVel);
     }
@@ -290,6 +377,7 @@ fragment float4 forceAreaOverlayFragment(
     OverlayVertexOut in [[stage_in]],
     texture2d<float, access::sample> particlesTexture [[texture(0)]],
     texture2d<float, access::sample> blurredParticlesTexture [[texture(1)]],
+    array<texture2d<float, access::sample>, 14> stoneTextures [[texture(2)]],
     constant WindZone*  windZones    [[buffer(0)]],
     constant float4x4  &gravityWell  [[buffer(1)]],
     constant float2    &viewportSize [[buffer(2)]],
@@ -297,7 +385,7 @@ fragment float4 forceAreaOverlayFragment(
 ) {
     in.uv.y = 1.0 - in.uv.y;
     const float2 pixelPos = in.uv * viewportSize;
-    constexpr sampler linearSampler(filter::linear, address::clamp_to_edge);
+    constexpr sampler linearSampler(filter::linear, address::clamp_to_zero);
 
     // Bloom: смешиваем исходную и размытую текстуру частиц.
     const float4 particlesSource = particlesTexture.sample(linearSampler, in.uv);
@@ -311,24 +399,6 @@ fragment float4 forceAreaOverlayFragment(
 
     float4 overlay = float4(0.0);
 
-    // ── Зоны ветра: голубое/бирюзовое свечение ────────────────────────────────
-    for (int i = 0; i < 4; i++) {
-        if (windZones[i].strength <= 0.0) continue;
-
-        const float radius = windZones[i].radius;
-        const float forceArea = distance(pixelPos, windZones[i].center);
-
-        float fill = (1.0 - smoothstep(0.0, radius, forceArea)) * 0.07;
-
-        float ring = smoothstep(radius * 0.91, radius * 0.96, forceArea)
-                   * (1.0 - smoothstep(radius * 0.96, radius * 1.0, forceArea));
-        ring *= 0.6;
-
-        float dot = 1.0 - smoothstep(0.0, radius * 0.03, forceArea);
-
-        float4 color = float4(0.15, 0.72, 1.0, 1.0) * (fill + ring + dot);
-//        overlay = saturate(overlay + color);
-    }
 
     // ── Гравитационные колодцы: оранжевое/янтарное свечение ──────────────────
     for (int i = 0; i < 4; i++) {
@@ -336,14 +406,16 @@ fragment float4 forceAreaOverlayFragment(
         if (mass <= 0.0) continue;
 
         const float2 wellPos = float2(gravityWell[i].x, gravityWell[i].y);
-        const float radius =  (mass) + 12.0 ;
-        const float forceArea = distance(pixelPos, wellPos);
+        const int stoneTextureIndex = (i * 3 + int(mass)) % 14;
+        const texture2d<float, access::sample> stoneTexture = stoneTextures[stoneTextureIndex];
+        const float texWidth = float(stoneTexture.get_width());
+        const float texHeight = float(stoneTexture.get_height());
+        const float aspect = texHeight > 0.0 ? texWidth / texHeight : 1.0;
+        const float radius = mass + 12.0;
+        const float2 stoneUV = stoneUVForWell(pixelPos, wellPos, radius, aspect);
+        const float4 stoneSample = stoneTexture.sample(linearSampler, stoneUV);
 
-        const float2 localUV = (pixelPos - wellPos) / radius;
-        float fill = diffuseSphereLayer(localUV);
-
-        float4 color =  float4(palett(fill * 2 )*fill + fill, 1.0);
-        overlay = saturate(overlay + color);
+        overlay += float4(stoneSample.rgb * stoneSample.a, stoneSample.a);
     }
 
     return saturate(particlesBase + (overlay * 1.15));
